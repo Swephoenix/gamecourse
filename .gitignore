@@ -1,0 +1,10 @@
+# Ignore large 3D model files
+*.blend
+*.fbx
+*.obj
+*.gltf
+*.glb
+
+# Ignore build artifacts
+node_modules/
+dist/
