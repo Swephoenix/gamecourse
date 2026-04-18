@@ -2,17 +2,27 @@
 <html lang="sv">
 <head>
     <meta charset="UTF-8">
-    <title>Mercedes GLS 580 - Fixed</title>
+    <title>Koenigsegg Agera - Racing Track</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #87CEEB; font-family: 'Segoe UI', sans-serif; }
         #loading {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            color: white; font-size: 24px; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;
+            color: #fff; text-align: center; z-index: 100; background: rgba(0,0,0,0.8); padding: 40px; border-radius: 20px;
         }
+        .spinner {
+            width: 50px; height: 50px; border: 3px solid rgba(255,255,255,0.1);
+            border-top: 3px solid #fff; border-radius: 50%; animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <div id="loading">Bearbetar Mercedes... <span id="percent">0</span>%</div>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div style="letter-spacing: 5px; font-weight: 200;">BUILDING TRACK...</div>
+        <div id="percent" style="font-size: 12px; margin-top: 10px; opacity: 0.5;">0%</div>
+    </div>
 
     <script type="importmap">
         {
@@ -27,194 +37,231 @@
         import * as THREE from 'three';
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
         import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB);
-
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
-        camera.position.set(0, 8, 20);  // Börja med bra avstånd
+        scene.fog = new THREE.Fog(0x87CEEB, 100, 1000); // Lätt dimma för realism
+        
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 5000);
+        camera.position.set(0, 10, 30);
+        
         const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
         document.body.appendChild(renderer.domElement);
 
-        // Starkare ljus för att se modellen tydligt
-        const sunLight = new THREE.DirectionalLight(0xffffff, 3);
-        sunLight.position.set(50, 100, 50);
+        // Miljö-reflektioner
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        const envTexture = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+        scene.environment = envTexture;
+
+        // Utomhusbelysning
+        const sunLight = new THREE.DirectionalLight(0xffffff, 2.5);
+        sunLight.position.set(100, 200, 100);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.set(4096, 4096);
+        sunLight.shadow.camera.left = -200;
+        sunLight.shadow.camera.right = 200;
+        sunLight.shadow.camera.top = 200;
+        sunLight.shadow.camera.bottom = -200;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 1000;
         scene.add(sunLight);
-        scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-        // Mark
-        const ground = new THREE.Mesh(
-            new THREE.PlaneGeometry(5000, 5000),
-            new THREE.MeshStandardMaterial({ color: 0x333333 })
-        );
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        scene.add(ground);
-        scene.add(new THREE.GridHelper(1000, 100));
-
-        const carGroup = new THREE.Group();
-        scene.add(carGroup);
-
-        const cameraTarget = new THREE.Object3D();
-        cameraTarget.position.set(0, 5, 15); 
-        carGroup.add(cameraTarget);
-
-let isReady = false;
-        const fbxLoader = new FBXLoader();
-        const objLoader = new OBJLoader();
+        // TERRÄNG OCH GUPP LOGIK
+        const groundSize = 4000;
+        const segments = 256;
+        const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize, segments, segments);
+        groundGeo.rotateX(-Math.PI / 2);
         
-        // Försök med OBJ först (bättre mesh-stöd)
-        objLoader.load('uploads_files_2787791_Mercedes+Benz+GLS+580.obj', (object) => {
-            console.log("OBJ laddad, fixar material...");
-            
-            object.traverse(child => {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: 0xffffff,
-                        metalness: 0.3,
-                        roughness: 0.4
-                    });
-                }
-            });
-            
-            const box = new THREE.Box3().setFromObject(object);
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            console.log("OBJ size:", size, "maxDim:", maxDim);
-            const scale = 20 / maxDim;
-            object.scale.set(scale, scale, scale);
-            object.position.set(0, 0, 0);
-            
-            let meshCount = 0;
-            object.traverse(c => { if(c.isMesh) meshCount++; });
-            console.log("OBJ meshes:", meshCount);
-            
-            carGroup.add(object);
-            isReady = true;
-            document.getElementById('loading').style.display = 'none';
-        }, (xhr) => {
-            const p = Math.round(xhr.loaded / xhr.total * 100);
-            document.getElementById('percent').innerText = p;
-        }, (err) => {
-            console.log("OBJ failed, trying FBX...");
-            loadFBX();
-        });
-
-        function loadFBX() {
-            fbxLoader.load('uploads_files_2787791_Mercedes+Benz+GLS+580.fbx', (object) => {
-            console.log("Modell inladdad, fixar material...");
-
-            // FIXA MATERIAL - Behåll originla om de har texturer, annars använd Mercedes-färger
-            const carBodyColor = 0xffffff;  // Vit
-            const carGlassColor = 0x88ccff; // Ljust glas
-            const carChromeColor = 0xeeeeee; // Ljus krom
-            
-            object.traverse(child => {
-                if (child.isMesh) {
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                    
-                    const name = child.name.toLowerCase();
-                    let color = carBodyColor;
-                    let metalness = 0.8;
-                    let roughness = 0.2;
-                    
-                    if (name.includes('glass') || name.includes('window') || name.includes('glas')) {
-                        color = carGlassColor;
-                        metalness = 0.1;
-                        roughness = 0.1;
-                    } else if (name.includes('chrome') || name.includes('metall') || name.includes('wheel')) {
-                        color = carChromeColor;
-                        metalness = 0.9;
-                        roughness = 0.1;
-                    } else if (name.includes('interior') || name.includes('seat')) {
-                        color = 0x333333;
-                        metalness = 0.1;
-                        roughness = 0.8;
-                    } else if (name.includes('tire') || name.includes('däck') || name.includes('gummi')) {
-                        color = 0x111111;
-                        metalness = 0.0;
-                        roughness = 0.9;
-                    }
-                    
-                    child.material = new THREE.MeshStandardMaterial({
-                        color: color,
-                        metalness: metalness,
-                        roughness: roughness
-                    });
-                }
-            });
-
-            // BERÄKNA STORLEK (FBX kan vara enorm)
-            const box = new THREE.Box3().setFromObject(object);
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            
-            console.log("Model size:", size, "maxDim:", maxDim);
-            
-            // Skala: bilen blir ca 5 enheter lång
-            const targetLength = 5;
-            let scale = 1;
-            if (maxDim > 0.01) {
-                scale = targetLength / maxDim;
-            }
-            console.log("Scale:", scale);
-            object.scale.set(scale, scale, scale);
-
-            // Sätt positionen enklare - direkt på marken
-            object.position.set(0, 0, 0);
-            
-            // Roterar inte - behåller original-orientering
-            // object.rotation.y = Math.PI;
-
-            console.log("Object position after scale:", object.position);
-            console.log("Object scale:", object.scale);
-            
-            // Räkna meshes
-            let meshCount = 0;
-            object.traverse(c => { if(c.isMesh) meshCount++; });
-            console.log("Total meshes:", meshCount);
-
-            carGroup.add(object);
-            isReady = true;
-            document.getElementById('loading').style.display = 'none';
-        }, (xhr) => {
-            const p = Math.round(xhr.loaded / xhr.total * 100);
-            document.getElementById('percent').innerText = p;
-        }, (err) => {
-            console.error("Fel vid laddning:", err);
-        });
+        const pos = groundGeo.attributes.position;
+        
+        function getGroundHeight(x, z) {
+            let h = 0;
+            // Stora mjuka kullar
+            h += Math.sin(x * 0.01) * Math.cos(z * 0.01) * 15;
+            // Fartgupp
+            h += Math.sin(x * 0.1) * Math.sin(z * 0.1) * 3;
+            // Små ojämnheter
+            h += Math.sin(x * 0.5) * 0.5;
+            return h;
         }
 
-        const keys = { w: false, a: false, s: false, d: false };
+        for (let i = 0; i < pos.count; i++) {
+            const px = pos.getX(i);
+            const pz = pos.getZ(i);
+            pos.setY(i, getGroundHeight(px, pz));
+        }
+        groundGeo.computeVertexNormals();
+
+        const groundMat = new THREE.MeshStandardMaterial({ 
+            color: 0x4a7c44, 
+            roughness: 0.9,
+            metalness: 0.0
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // RACINGBANA
+        const trackGeo = new THREE.RingGeometry(200, 240, 128);
+        trackGeo.rotateX(-Math.PI / 2);
+        const trackMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+        const track = new THREE.Mesh(trackGeo, trackMat);
+        track.receiveShadow = true;
+        
+        track.traverse(c => {
+            if(c.geometry && c.geometry.attributes.position) {
+                const p = c.geometry.attributes.position;
+                for(let i=0; i<p.count; i++) {
+                    p.setY(i, getGroundHeight(p.getX(i), p.getZ(i)) + 0.1);
+                }
+            }
+        });
+        scene.add(track);
+
+        // HIERARKI FÖR BILEN:
+        // carGroup (hanterar X/Z & styrning) -> carPitchGroup (hanterar backar) -> modelMesh (centrerar grafiken)
+        const carGroup = new THREE.Group();
+        const carPitchGroup = new THREE.Group(); 
+        carGroup.add(carPitchGroup);
+        scene.add(carGroup);
+
+        // MATERIAL
+        const bodyMat = new THREE.MeshPhysicalMaterial({ color: 0xcc0000, metalness: 0.9, roughness: 0.1, clearcoat: 1.0 });
+        const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x000000, transparent: true, opacity: 0.3, transmission: 0.9, depthWrite: false });
+
+        let isReady = false;
+        const fbxLoader = new FBXLoader();
+        const objLoader = new OBJLoader();
+
+        function applyMaterials(object) {
+            object.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    const name = child.name.toLowerCase();
+                    if (name.includes('glass')) child.material = glassMat;
+                    else if (name.includes('tire')) child.material = new THREE.MeshStandardMaterial({ color: 0x111111 });
+                    else child.material = bodyMat;
+                }
+            });
+
+            // 1. Skalning
+            const box = new THREE.Box3().setFromObject(object);
+            const size = box.getSize(new THREE.Vector3());
+            const scale = 7 / Math.max(size.x, size.y, size.z);
+            object.scale.setScalar(scale);
+
+            // 2. Centrering
+            const finalBox = new THREE.Box3().setFromObject(object);
+            const center = finalBox.getCenter(new THREE.Vector3());
+            object.position.set(-center.x, -finalBox.min.y, -center.z);
+
+            // 3. Justera orienteringen så -Z är "framåt"
+            const modelMesh = new THREE.Group();
+            modelMesh.add(object);
+            modelMesh.rotation.y = Math.PI; // Vänder bilen rätt
+
+            carPitchGroup.add(modelMesh);
+            
+            // Startposition för bilen (lägg den på banan)
+            carGroup.position.set(220, 0, 0);
+
+            isReady = true;
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        fbxLoader.load('models/82-koenigsegg-agera/koenigsegg.fbx', applyMaterials, 
+            (xhr) => { document.getElementById('percent').innerText = Math.round(xhr.loaded/xhr.total*100) + '%'; },
+            (err) => { 
+                objLoader.load('models/82-koenigsegg-agera/koenigsegg.obj', applyMaterials);
+            }
+        );
+
+        const keys = { w: false, a: false, s: false, d: false, ' ': false };
         window.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
         window.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
         let speed = 0;
+        let verticalVelocity = 0;
+        const gravity = 0.005; // Låg gravitation
+
         function update() {
             if (!isReady) return;
-
-            if (keys.w) speed -= 0.02;
-            if (keys.s) speed += 0.02;
-            speed *= 0.96;
+            
+            // --- 1. STYRNING OCH HASTIGHET (Yaw / XZ-plan) ---
+            if (keys.w) speed -= 0.05; // Framåt i Three.js är oftast negativ Z
+            if (keys.s) speed += 0.05; // Bakåt
+            speed *= 0.96; // Friktion
 
             if (Math.abs(speed) > 0.01) {
-                const dir = speed > 0 ? -1 : 1;
+                // Vi vill svänga åt samma håll oavsett om vi backar eller kör framåt
+                const dir = speed < 0 ? 1 : -1; 
                 if (keys.a) carGroup.rotation.y += 0.04 * dir;
                 if (keys.d) carGroup.rotation.y -= 0.04 * dir;
             }
-
+            
+            // Flytta bilen framåt/bakåt
             carGroup.translateZ(speed);
 
-            // Enkel kamera - följer bilen bakifrån
-            const offset = new THREE.Vector3(0, 15, 40);
+            // --- 2. FYSIK / TERRÄNGFÖLJNING (Pitch / Y-plan) ---
+            const groundHeight = getGroundHeight(carGroup.position.x, carGroup.position.z);
+            
+            // Applicera gravitation
+            verticalVelocity -= gravity;
+            carGroup.position.y += verticalVelocity;
+
+            // Mark-kollision och hopp
+            if (carGroup.position.y <= groundHeight) {
+                carGroup.position.y = groundHeight;
+                
+                // Om vi är på marken och trycker på hopp
+                if (keys[' ']) {
+                    verticalVelocity = 0.25; // Hopp-kraft
+                } else if (verticalVelocity < 0) {
+                    verticalVelocity = 0; // Stanna på marken
+                }
+            }
+
+            // Räkna ut lutningen
+            carGroup.updateMatrixWorld();
+            
+            const isOnGround = carGroup.position.y <= groundHeight + 0.1;
+
+            if (isOnGround) {
+                // Skapa virtuella mätpunkter (3 enheter framför, 3 enheter bakom)
+                const frontPoint = new THREE.Vector3(0, 0, -3).applyMatrix4(carGroup.matrixWorld);
+                const backPoint = new THREE.Vector3(0, 0, 3).applyMatrix4(carGroup.matrixWorld);
+
+                const frontHeight = getGroundHeight(frontPoint.x, frontPoint.z);
+                const backHeight = getGroundHeight(backPoint.x, backPoint.z);
+
+                // Räkna ut vinkeln mellan bakhjul och framhjul
+                const deltaY = frontHeight - backHeight;
+                const distance = 6; // Avstånd från frontPoint till backPoint
+                const pitchAngle = Math.atan2(deltaY, distance);
+
+                // Applicera vinkeln ENDAST på pitch-gruppen
+                carPitchGroup.rotation.x = pitchAngle; 
+            } else {
+                // I luften: Räta upp bilen långsamt eller behåll vinkeln
+                carPitchGroup.rotation.x *= 0.98;
+            }
+
+            // --- 3. KAMERA ---
+            const offset = new THREE.Vector3(0, 5, 18);
             offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), carGroup.rotation.y);
-            camera.position.copy(carGroup.position).add(offset);
-            camera.lookAt(carGroup.position.x, carGroup.position.y + 3, carGroup.position.z);
+            
+            // Gör kameran lite mjukare i guppen genom att inte omedelbart snappa till bilens exakta Y
+            const targetPos = carGroup.position.clone().add(offset);
+            camera.position.lerp(targetPos, 0.1);
+            camera.lookAt(carGroup.position.x, carGroup.position.y + 2, carGroup.position.z);
         }
 
         function animate() {
@@ -222,6 +269,13 @@ let isReady = false;
             update();
             renderer.render(scene, camera);
         }
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
         animate();
     </script>
 </body>
