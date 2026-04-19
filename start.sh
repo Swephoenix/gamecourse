@@ -12,4 +12,4 @@ elif command -v open > /dev/null; then
 fi
 
 # Starta servern
-python3 -m http.server $PORT
+python3 game_server.py $PORT

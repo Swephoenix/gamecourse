@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Minimal 3D Drift Racing</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Himmel */
+            touch-action: none; /* Förhindrar zoom/scroll på mobil */
+            font-family: sans-serif;
+        }
+        #game-container { width: 100vw; height: 100vh; display: block; }
+        
+        /* UI Kontroller */
+        #ui-layer {
+            position: absolute;
+            bottom: 0; left: 0; width: 100%; height: 30%;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .btn-group { display: flex; gap: 10px; pointer-events: auto; }
+        .btn {
+            width: 70px; height: 70px;
+            background: rgba(255, 255, 255, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 24px; font-weight: bold; color: white;
+            user-select: none; -webkit-user-select: none;
+        }
+        .btn:active, .btn.active { background: rgba(255, 255, 255, 0.7); color: black; }
+        
+        #instructions {
+            position: absolute; top: 10px; left: 0; width: 100%;
+            text-align: center; color: white; text-shadow: 1px 1px 2px black;
+            pointer-events: none; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="instructions">
+    <h2>Drift Racing</h2>
+    <p>Mobil: Använd knapparna | Desktop: Piltangenter/WASD</p>
+</div>
+
+<div id="ui-layer">
+    <div class="btn-group">
+        <div class="btn" id="btn-left">←</div>
+        <div class="btn" id="btn-right">→</div>
+    </div>
+    <div class="btn-group">
+        <div class="btn" id="btn-brake">B/R</div>
+        <div class="btn" id="btn-gas">GAS</div>
+    </div>
+</div>
+
+<!-- Three.js (ES Module via CDN) -->
+<script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+    // --- SETUP ---
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x87ceeb, 20, 100);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // Ljus
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(100, 100, 50);
+    dirLight.castShadow = true;
+    dirLight.shadow.camera.top = 50; dirLight.shadow.camera.bottom = -50;
+    dirLight.shadow.camera.left = -50; dirLight.shadow.camera.right = 50;
+    scene.add(dirLight);
+
+    // --- SKAPA BANA (Procedural Canvas Texture) ---
+    function createTrackTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 2048; canvas.height = 2048;
+        const ctx = canvas.getContext('2d');
+        
+        // Gräs
+        ctx.fillStyle = '#4CAF50';
+        ctx.fillRect(0, 0, 2048, 2048);
+        
+        // Asfalt (Bana)
+        ctx.lineWidth = 180;
+        ctx.strokeStyle = '#333';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        // Rita en oval/åtta-bana
+        ctx.moveTo(600, 500);
+        ctx.bezierCurveTo(1800, 500, 1800, 1500, 1000, 1500);
+        ctx.bezierCurveTo(200, 1500, 200, 500, 600, 500);
+        ctx.stroke();
+
+        // Banmarkeringar (Röda/Vita curbs)
+        ctx.lineWidth = 20;
+        ctx.setLineDash([40, 40]);
+        ctx.strokeStyle = '#fff';
+        ctx.stroke();
+        ctx.lineDashOffset = 40;
+        ctx.strokeStyle = '#f00';
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
+    }
+
+    const groundGeo = new THREE.PlaneGeometry(200, 200);
+    const groundMat = new THREE.MeshStandardMaterial({ map: createTrackTexture() });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // --- SKAPA BILEN ---
+    const carGroup = new THREE.Group();
+    // Kaross
+    const bodyGeo = new THREE.BoxGeometry(1.2, 0.5, 2.4);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
+    const carBody = new THREE.Mesh(bodyGeo, bodyMat);
+    carBody.position.y = 0.4;
+    carBody.castShadow = true;
+    carGroup.add(carBody);
+    // Framruta (för att se riktning)
+    const windowGeo = new THREE.BoxGeometry(1.0, 0.3, 0.8);
+    const windowMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    const carWindow = new THREE.Mesh(windowGeo, windowMat);
+    carWindow.position.set(0, 0.7, 0.2);
+    carGroup.add(carWindow);
+    
+    // Startposition på banan
+    carGroup.position.set(-20, 0, -25);
+    scene.add(carGroup);
+
+    // --- EFFEKTER (Rök & Sladdspår) ---
+    const particles = [];
+    const skidmarks = [];
+    const maxSkidmarks = 150;
+
+    function spawnSmoke(x, y, z) {
+        const geo = new THREE.SphereGeometry(0.3, 4, 4);
+        const mat = new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.6 });
+        const smoke = new THREE.Mesh(geo, mat);
+        smoke.position.set(x, y, z);
+        scene.add(smoke);
+        particles.push({ mesh: smoke, life: 1.0 });
+    }
+
+    function spawnSkidmark(x, z, angle) {
+        const geo = new THREE.PlaneGeometry(0.8, 0.4);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5 });
+        const mark = new THREE.Mesh(geo, mat);
+        mark.position.set(x, 0.01, z); // Strax över marken
+        mark.rotation.x = -Math.PI / 2;
+        mark.rotation.z = -angle;
+        scene.add(mark);
+        skidmarks.push(mark);
+        if (skidmarks.length > maxSkidmarks) {
+            const oldMark = skidmarks.shift();
+            scene.remove(oldMark);
+            oldMark.geometry.dispose();
+            oldMark.material.dispose();
+        }
+    }
+
+    // --- KONTROLLER & INPUT ---
+    const input = { forward: false, backward: false, left: false, right: false };
+
+    // Desktop
+    window.addEventListener('keydown', (e) => {
+        if(e.key === 'ArrowUp' || e.key === 'w') input.forward = true;
+        if(e.key === 'ArrowDown' || e.key === 's') input.backward = true;
+        if(e.key === 'ArrowLeft' || e.key === 'a') input.left = true;
+        if(e.key === 'ArrowRight' || e.key === 'd') input.right = true;
+    });
+    window.addEventListener('keyup', (e) => {
+        if(e.key === 'ArrowUp' || e.key === 'w') input.forward = false;
+        if(e.key === 'ArrowDown' || e.key === 's') input.backward = false;
+        if(e.key === 'ArrowLeft' || e.key === 'a') input.left = false;
+        if(e.key === 'ArrowRight' || e.key === 'd') input.right = false;
+    });
+
+    // Mobil Touch
+    const bindBtn = (id, key) => {
+        const btn = document.getElementById(id);
+        const down = (e) => { e.preventDefault(); input[key] = true; btn.classList.add('active'); };
+        const up = (e) => { e.preventDefault(); input[key] = false; btn.classList.remove('active'); };
+        btn.addEventListener('pointerdown', down);
+        btn.addEventListener('pointerup', up);
+        btn.addEventListener('pointercancel', up);
+    };
+    bindBtn('btn-gas', 'forward');
+    bindBtn('btn-brake', 'backward');
+    bindBtn('btn-left', 'left');
+    bindBtn('btn-right', 'right');
+
+    // --- LJUD ---
+    const engineAudio = new Audio('./astonmartinvantagev12-chevrolet-corvette-c6-sound-effect-360531.mp3');
+    engineAudio.loop = true;
+    engineAudio.volume = 0;
+    const driftAudio = new Audio('./The Sounds of POWER- The Sounds of Formula Drift.mp3');
+    driftAudio.loop = true;
+    driftAudio.volume = 0;
+
+    function ensureEngineAudioStarted() {
+        if (ensureEngineAudioStarted.started) return;
+        ensureEngineAudioStarted.started = true;
+        Promise.all([
+            engineAudio.play(),
+            driftAudio.play()
+        ]).catch(() => {
+            ensureEngineAudioStarted.started = false;
+        });
+    }
+    ensureEngineAudioStarted.started = false;
+
+    window.addEventListener('pointerdown', ensureEngineAudioStarted, { passive: true });
+    window.addEventListener('keydown', ensureEngineAudioStarted);
+
+    // --- FYSIK & DRIFTING LOGIK ---
+    const physics = {
+        speed: 0,
+        maxSpeed: 25,
+        acceleration: 15,
+        braking: 20,
+        friction: 5,
+        autoDriveSpeed: 3, // Kör automatiskt långsamt
+        angle: Math.PI,    // Bilens visuella riktning
+        velocityX: 0,
+        velocityZ: 0,
+        turnSpeed: 2.5
+    };
+
+    const clock = new THREE.Clock();
+
+    function updatePhysics(delta) {
+        // Gas & Broms (med auto-drive)
+        if (input.forward) {
+            physics.speed += physics.acceleration * delta;
+        } else if (input.backward) {
+            physics.speed -= physics.braking * delta;
+        } else {
+            // Återgå till autoDriveSpeed
+            if (physics.speed > physics.autoDriveSpeed) {
+                physics.speed -= physics.friction * delta;
+            } else if (physics.speed < physics.autoDriveSpeed && physics.speed >= 0) {
+                physics.speed += physics.friction * delta * 0.5;
+            }
+        }
+        
+        // Backa gräns
+        physics.speed = THREE.MathUtils.clamp(physics.speed, -10, physics.maxSpeed);
+
+        // Styrning (bara om vi rör oss)
+        const isReversing = physics.speed < 0 ? -1 : 1;
+        const moveRatio = Math.abs(physics.speed) / physics.maxSpeed;
+        if (Math.abs(physics.speed) > 0.1) {
+            if (input.left) physics.angle += physics.turnSpeed * delta * isReversing;
+            if (input.right) physics.angle -= physics.turnSpeed * delta * isReversing;
+        }
+
+        // --- DRIFTING MAGIN ---
+        // Vart bilen pekar
+        const targetDirX = Math.sin(physics.angle);
+        const targetDirZ = Math.cos(physics.angle);
+
+        // Mål-hastighetsvektor
+        const targetVelX = targetDirX * physics.speed;
+        const targetVelZ = targetDirZ * physics.speed;
+
+        // Grip (Hur snabbt hastigheten anpassar sig till riktningen). Lägre = mer drift.
+        const grip = 3.5; 
+        physics.velocityX = THREE.MathUtils.lerp(physics.velocityX, targetVelX, grip * delta);
+        physics.velocityZ = THREE.MathUtils.lerp(physics.velocityZ, targetVelZ, grip * delta);
+
+        // Applicera hastighet till position
+        carGroup.position.x += physics.velocityX * delta;
+        carGroup.position.z += physics.velocityZ * delta;
+        
+        // Uppdatera bilens visuella rotation
+        carGroup.rotation.y = physics.angle;
+
+        // Beräkna "slip angle" (skillnad mellan rörelsevektor och riktningsvektor) för effekter
+        const currentSpeed = Math.sqrt(physics.velocityX**2 + physics.velocityZ**2);
+        const moveDirAngle = Math.atan2(physics.velocityX, physics.velocityZ);
+        
+        // Hur mycket sladdar vi?
+        let slip = Math.abs(physics.angle - moveDirAngle);
+        slip = Math.atan2(Math.sin(slip), Math.cos(slip)); // Normalisera till -PI till PI
+        const slipAmount = Math.abs(slip);
+        const steeringAmount = (input.left || input.right) ? 1 : 0;
+        const speedFactor = THREE.MathUtils.clamp((currentSpeed - 4) / 12, 0, 1);
+        const driftFactor = THREE.MathUtils.clamp((slipAmount - 0.18) / 0.75, 0, 1) * speedFactor * steeringAmount;
+        const targetEngineVolume = driftFactor > 0.05 ? 0 : (input.forward ? 0.45 : 0);
+        engineAudio.volume = THREE.MathUtils.lerp(engineAudio.volume, targetEngineVolume, 3 * delta);
+        driftAudio.volume = THREE.MathUtils.lerp(driftAudio.volume, driftFactor * 0.75, 3 * delta);
+
+        // Aktivera effekter om vi kör fort och sladdar mycket
+        if (currentSpeed > 5 && slipAmount > 0.3) {
+            // Räkna ut var bakhjulen är ungefär
+            const backX = carGroup.position.x - Math.sin(physics.angle) * 1.0;
+            const backZ = carGroup.position.z - Math.cos(physics.angle) * 1.0;
+            
+            spawnSkidmark(backX, backZ, physics.angle);
+            if(Math.random() > 0.5) spawnSmoke(backX + (Math.random()-0.5), 0.2, backZ + (Math.random()-0.5));
+            
+            // Få bilen att skaka lite vid drifting
+            carBody.position.x = (Math.random() - 0.5) * 0.05;
+        } else {
+            carBody.position.x = 0;
+        }
+    }
+
+    // --- KAMERA (Stående mobil-vänlig) ---
+    function updateCamera() {
+        const offsetDist = 7;
+        const offsetHeight = 5;
+        
+        // Kameran följer efter bilen, lite mer flexibel för "fartkänsla"
+        const targetCamX = carGroup.position.x - Math.sin(physics.angle) * offsetDist;
+        const targetCamZ = carGroup.position.z - Math.cos(physics.angle) * offsetDist;
+
+        camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, 0.1);
+        camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.1);
+        camera.position.y = THREE.MathUtils.lerp(camera.position.y, carGroup.position.y + offsetHeight, 0.1);
+
+        // Titta en bit framför bilen
+        const lookAtTarget = new THREE.Vector3(
+            carGroup.position.x + Math.sin(physics.angle) * 3,
+            carGroup.position.y,
+            carGroup.position.z + Math.cos(physics.angle) * 3
+        );
+        camera.lookAt(lookAtTarget);
+    }
+
+    // --- RENDER LOOP ---
+    function animate() {
+        requestAnimationFrame(animate);
+        const delta = Math.min(clock.getDelta(), 0.1); // Förhindra glitch vid lagg
+
+        updatePhysics(delta);
+        updateCamera();
+
+        // Uppdatera rökpartiklar
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.life -= delta * 1.5;
+            p.mesh.position.y += delta * 2;
+            p.mesh.scale.setScalar(p.life * 1.5);
+            p.mesh.material.opacity = p.life;
+            if (p.life <= 0) {
+                scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                p.mesh.material.dispose();
+                particles.splice(i, 1);
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // Hantera ändring av fönsterstorlek (Mobil rotering)
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+</body>
+</html>
