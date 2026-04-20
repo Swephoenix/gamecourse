@@ -268,6 +268,20 @@
             border-color: rgba(255, 177, 0, 0.45);
         }
 
+        .editor-settings {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .editor-settings.hidden {
+            display: none;
+        }
+
+        .editor-settings input {
+            width: 100%;
+        }
+
         #editor-help,
         #save-feedback {
             font-size: 0.9rem;
@@ -407,6 +421,17 @@
             <button id="rotate-right" type="button">Rotera +15°</button>
         </div>
 
+        <div id="ramp-settings" class="editor-settings">
+            <label>
+                Ramp längd
+                <input id="ramp-length" type="number" min="4" max="40" step="1" value="8">
+            </label>
+            <label>
+                Ramp höjd
+                <input id="ramp-height" type="number" min="1" max="16" step="0.5" value="2">
+            </label>
+        </div>
+
         <label>
             Kartnamn
             <input id="editor-map-name" type="text" placeholder="Ny bana">
@@ -439,6 +464,7 @@
 
     const STORAGE_KEY = 'drift-racing-custom-maps-v1';
     const mapBounds = { min: -95, max: 95 };
+    const rampLimits = { minLength: 4, maxLength: 40, minHeight: 1, maxHeight: 16 };
 
     const defaultMaps = [
         {
@@ -461,6 +487,64 @@
                 { id: crypto.randomUUID(), type: 'ramp', x: 8, z: 32, rotation: Math.PI },
                 { id: crypto.randomUUID(), type: 'water', x: 0, z: -28, rotation: 0 },
                 { id: crypto.randomUUID(), type: 'water', x: 36, z: 30, rotation: 0 }
+            ]
+        },
+        {
+            id: 'jump-challenge',
+            name: 'Jump Challenge',
+            builtIn: true,
+            start: { x: 0, z: 95, angle: Math.PI },
+            mission: {
+                type: 'jump-zone',
+                title: 'Jump Challenge',
+                description: 'Ta maxfart, flyg over ett enormt bilhav och landa extremt langt bort i den grona zonen.',
+                landingZone: { x: 0, z: -88, width: 24, depth: 18, rotation: 0 },
+                failLineOffset: 16,
+                obstacleCars: [
+                    { x: -10, z: 18, rotation: 0 },
+                    { x: -5, z: 18, rotation: 0 },
+                    { x: 0, z: 18, rotation: 0 },
+                    { x: 5, z: 18, rotation: 0 },
+                    { x: 10, z: 18, rotation: 0 },
+                    { x: -10, z: 12, rotation: 0 },
+                    { x: -5, z: 12, rotation: 0 },
+                    { x: 0, z: 12, rotation: 0 },
+                    { x: 5, z: 12, rotation: 0 },
+                    { x: 10, z: 12, rotation: 0 },
+                    { x: -10, z: 6, rotation: 0 },
+                    { x: -5, z: 6, rotation: 0 },
+                    { x: 0, z: 6, rotation: 0 },
+                    { x: 5, z: 6, rotation: 0 },
+                    { x: 10, z: 6, rotation: 0 },
+                    { x: -10, z: 0, rotation: 0 },
+                    { x: -5, z: 0, rotation: 0 },
+                    { x: 0, z: 0, rotation: 0 },
+                    { x: 5, z: 0, rotation: 0 },
+                    { x: 10, z: 0, rotation: 0 },
+                    { x: -10, z: -6, rotation: 0 },
+                    { x: -5, z: -6, rotation: 0 },
+                    { x: 0, z: -6, rotation: 0 },
+                    { x: 5, z: -6, rotation: 0 },
+                    { x: 10, z: -6, rotation: 0 },
+                    { x: -10, z: -12, rotation: 0 },
+                    { x: -5, z: -12, rotation: 0 },
+                    { x: 0, z: -12, rotation: 0 },
+                    { x: 5, z: -12, rotation: 0 },
+                    { x: 10, z: -12, rotation: 0 },
+                    { x: -10, z: -18, rotation: 0 },
+                    { x: -5, z: -18, rotation: 0 },
+                    { x: 0, z: -18, rotation: 0 },
+                    { x: 5, z: -18, rotation: 0 },
+                    { x: 10, z: -18, rotation: 0 },
+                    { x: -10, z: -24, rotation: 0 },
+                    { x: -5, z: -24, rotation: 0 },
+                    { x: 0, z: -24, rotation: 0 },
+                    { x: 5, z: -24, rotation: 0 },
+                    { x: 10, z: -24, rotation: 0 }
+                ]
+            },
+            objects: [
+                { id: crypto.randomUUID(), type: 'ramp', x: 0, z: 26, rotation: 0, rampLength: 34, rampHeight: 11 }
             ]
         }
     ];
@@ -535,18 +619,145 @@
     scene.add(gridHelper);
 
     const carGroup = new THREE.Group();
-    const bodyGeo = new THREE.BoxGeometry(1.2, 0.5, 2.4);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
-    const carBody = new THREE.Mesh(bodyGeo, bodyMat);
-    carBody.position.y = 0.4;
-    carBody.castShadow = true;
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.74, metalness: 0.1 });
+    const trimMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.65, metalness: 0.15 });
+    const lightMat = new THREE.MeshStandardMaterial({
+        color: 0xfaf2c0,
+        emissive: 0xfaf2c0,
+        emissiveIntensity: 0.25,
+        roughness: 0.4
+    });
+
+    const carBody = new THREE.Group();
+
+    const mainShell = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.34, 2.16), bodyMat);
+    mainShell.position.y = 0.76;
+    mainShell.castShadow = true;
+    carBody.add(mainShell);
+
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.18, 0.9), bodyMat);
+    hood.position.set(0, 0.84, 0.6);
+    hood.rotation.x = -0.08;
+    hood.castShadow = true;
+    carBody.add(hood);
+
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.16, 0.42), bodyMat);
+    nose.position.set(0, 0.72, 1.18);
+    nose.rotation.x = 0.12;
+    nose.castShadow = true;
+    carBody.add(nose);
+
+    const rearDeck = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.18, 0.72), bodyMat);
+    rearDeck.position.set(0, 0.86, -0.72);
+    rearDeck.rotation.x = 0.05;
+    rearDeck.castShadow = true;
+    carBody.add(rearDeck);
+
+    const cabinBase = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.24, 0.86), trimMat);
+    cabinBase.position.set(0, 0.98, -0.02);
+    cabinBase.castShadow = true;
+    carBody.add(cabinBase);
+
+    const windshield = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.26, 0.14), trimMat);
+    windshield.position.set(0, 1.06, 0.28);
+    windshield.rotation.x = -0.58;
+    windshield.castShadow = true;
+    carBody.add(windshield);
+
+    const carWindow = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.14, 0.52), new THREE.MeshStandardMaterial({
+        color: 0x101820,
+        transparent: true,
+        opacity: 0.82,
+        roughness: 0.2,
+        metalness: 0.1
+    }));
+    carWindow.position.set(0, 1.08, -0.02);
+    carBody.add(carWindow);
+
+    const headlightLeft = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.14), lightMat);
+    headlightLeft.position.set(-0.34, 0.81, 1.09);
+    carBody.add(headlightLeft);
+
+    const headlightRight = headlightLeft.clone();
+    headlightRight.position.x = 0.34;
+    carBody.add(headlightRight);
+
+    const grille = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.06), trimMat);
+    grille.position.set(0, 0.69, 1.24);
+    carBody.add(grille);
+
+    const mirrorLeft = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.12), trimMat);
+    mirrorLeft.position.set(-0.6, 0.98, 0.2);
+    carBody.add(mirrorLeft);
+
+    const mirrorRight = mirrorLeft.clone();
+    mirrorRight.position.x = 0.6;
+    carBody.add(mirrorRight);
+
+    const taillightLeft = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.08), new THREE.MeshStandardMaterial({
+        color: 0xaa1f24,
+        emissive: 0x440000,
+        emissiveIntensity: 0.18,
+        roughness: 0.55
+    }));
+    taillightLeft.position.set(-0.32, 0.82, -1.13);
+    carBody.add(taillightLeft);
+
+    const taillightRight = taillightLeft.clone();
+    taillightRight.position.x = 0.32;
+    carBody.add(taillightRight);
+
     carGroup.add(carBody);
 
-    const windowGeo = new THREE.BoxGeometry(1.0, 0.3, 0.8);
-    const windowMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-    const carWindow = new THREE.Mesh(windowGeo, windowMat);
-    carWindow.position.set(0, 0.7, 0.2);
-    carGroup.add(carWindow);
+    const wheelRadius = 0.22;
+    const wheelThickness = 0.18;
+    const wheelOffsetX = 0.52;
+    const frontAxleZ = 0.88;
+    const rearAxleZ = -0.88;
+    const wheelSpinTargets = [];
+    const tempVector = new THREE.Vector3();
+    const supportEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+    const supportMatrix = new THREE.Matrix4();
+
+    function createWheel() {
+        const wheelGroup = new THREE.Group();
+        const tire = new THREE.Mesh(
+            new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelThickness, 18),
+            new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 })
+        );
+        // Rotate so the flat sides face outward left/right.
+        tire.rotation.z = Math.PI / 2;
+        tire.castShadow = true;
+        tire.receiveShadow = true;
+        wheelGroup.add(tire);
+
+        const rim = new THREE.Mesh(
+            new THREE.CylinderGeometry(wheelRadius * 0.58, wheelRadius * 0.58, wheelThickness + 0.02, 12),
+            new THREE.MeshStandardMaterial({ color: 0xbfc7d6, roughness: 0.35, metalness: 0.75 })
+        );
+        rim.rotation.z = Math.PI / 2;
+        wheelGroup.add(rim);
+
+        return wheelGroup;
+    }
+
+    function addWheel(x, y, z, front = false) {
+        const steeringPivot = new THREE.Group();
+        steeringPivot.position.set(x, y, z);
+
+        const spinPivot = new THREE.Group();
+        const wheel = createWheel();
+        spinPivot.add(wheel);
+        steeringPivot.add(spinPivot);
+        carGroup.add(steeringPivot);
+
+        wheelSpinTargets.push({ steeringPivot, spinPivot, front, localX: x, localZ: z, baseY: y });
+    }
+
+    addWheel(-wheelOffsetX, wheelRadius, frontAxleZ, true);
+    addWheel(wheelOffsetX, wheelRadius, frontAxleZ, true);
+    addWheel(-wheelOffsetX, wheelRadius, rearAxleZ, false);
+    addWheel(wheelOffsetX, wheelRadius, rearAxleZ, false);
 
     scene.add(carGroup);
 
@@ -563,6 +774,7 @@
     scene.add(placementPreview);
 
     const raycaster = new THREE.Raycaster();
+    const surfaceRaycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     const clock = new THREE.Clock();
 
@@ -570,6 +782,9 @@
     const skidmarks = [];
     const maxSkidmarks = 150;
     const mapObjectMeshes = [];
+    const missionMeshes = [];
+    const collidableSurfaces = [ground];
+    const surfaceMeshToEntry = new Map();
 
     const input = { forward: false, backward: false, left: false, right: false };
 
@@ -583,10 +798,19 @@
         angle: Math.PI,
         velocityX: 0,
         velocityZ: 0,
-        turnSpeed: 2.5,
+        turnSpeed: 2.35,
         verticalVelocity: 0,
-        gravity: 12,
-        onGround: true
+        gravity: 4.5,
+        onGround: true,
+        pitch: 0,
+        pitchVelocity: 0,
+        roll: 0,
+        rampContactId: null,
+        rampProgress: 0,
+        rampAngle: 0,
+        rampHeight: 0,
+        rampAlignment: 0,
+        justLaunched: false
     };
 
     const appState = {
@@ -594,11 +818,14 @@
         selectedMenuMode: 'drive',
         selectedTool: 'ramp',
         placementRotation: 0,
+        rampLength: 8,
+        rampHeight: 2,
         maps: [],
         currentMapId: null,
         editorMap: null,
         testDriveActive: false,
-        topSpeed: 0
+        topSpeed: 0,
+        missionState: null
     };
 
     const editorCamera = {
@@ -650,6 +877,9 @@
     const uiLayer = document.getElementById('ui-layer');
     const editorPanel = document.getElementById('editor-panel');
     const editorMapName = document.getElementById('editor-map-name');
+    const rampSettings = document.getElementById('ramp-settings');
+    const rampLengthInput = document.getElementById('ramp-length');
+    const rampHeightInput = document.getElementById('ramp-height');
     const testDriveButton = document.getElementById('test-drive');
     const saveMapButton = document.getElementById('save-map');
     const newMapButton = document.getElementById('new-map');
@@ -667,6 +897,12 @@
             id: map.id,
             name: map.name,
             builtIn: Boolean(map.builtIn),
+            start: map.start ? { ...map.start } : null,
+            mission: map.mission ? {
+                ...map.mission,
+                landingZone: map.mission.landingZone ? { ...map.mission.landingZone } : null,
+                obstacleCars: Array.isArray(map.mission.obstacleCars) ? map.mission.obstacleCars.map((car) => ({ ...car })) : []
+            } : null,
             objects: map.objects.map((object) => ({ ...object }))
         };
     }
@@ -676,12 +912,17 @@
             return null;
         }
 
+        const rampLength = THREE.MathUtils.clamp(Number(object.rampLength) || 8, rampLimits.minLength, rampLimits.maxLength);
+        const rampHeight = THREE.MathUtils.clamp(Number(object.rampHeight) || 2, rampLimits.minHeight, rampLimits.maxHeight);
+
         return {
             id: object.id || crypto.randomUUID(),
             type: object.type,
             x: THREE.MathUtils.clamp(Number(object.x) || 0, mapBounds.min, mapBounds.max),
             z: THREE.MathUtils.clamp(Number(object.z) || 0, mapBounds.min, mapBounds.max),
-            rotation: Number(object.rotation) || 0
+            rotation: Number(object.rotation) || 0,
+            rampLength: object.type === 'ramp' ? rampLength : undefined,
+            rampHeight: object.type === 'ramp' ? rampHeight : undefined
         };
     }
 
@@ -791,33 +1032,58 @@
         });
     }
 
+    function clearMissionMeshes() {
+        while (missionMeshes.length) {
+            const mesh = missionMeshes.pop();
+            scene.remove(mesh);
+            mesh.traverse((child) => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach((material) => material.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            });
+        }
+    }
+
     function clearMapObjects() {
+        collidableSurfaces.length = 1;
+        surfaceMeshToEntry.clear();
         while (mapObjectMeshes.length) {
             disposeObjectMesh(mapObjectMeshes.pop());
         }
+        clearMissionMeshes();
     }
 
     function createRampMesh(object) {
         const group = new THREE.Group();
+        const rampLength = THREE.MathUtils.clamp(Number(object.rampLength) || 8, rampLimits.minLength, rampLimits.maxLength);
+        const rampHeight = THREE.MathUtils.clamp(Number(object.rampHeight) || 2, rampLimits.minHeight, rampLimits.maxHeight);
+        const rampWidth = 6;
+        const profile = new THREE.Shape();
+        profile.moveTo(-rampLength / 2, 0);
+        profile.lineTo(rampLength / 2, rampHeight);
+        profile.lineTo(rampLength / 2, 0);
+        profile.lineTo(-rampLength / 2, 0);
 
-        const base = new THREE.Mesh(
-            new THREE.BoxGeometry(6, 0.4, 8),
-            new THREE.MeshStandardMaterial({ color: 0x6a4524 })
-        );
-        base.position.y = 0.2;
-        base.castShadow = true;
-        base.receiveShadow = true;
-        group.add(base);
+        const rampGeometry = new THREE.ExtrudeGeometry(profile, {
+            depth: rampWidth,
+            bevelEnabled: false
+        });
+        rampGeometry.rotateY(Math.PI / 2);
+        rampGeometry.translate(-rampWidth / 2, 0, 0);
 
-        const slope = new THREE.Mesh(
-            new THREE.BoxGeometry(6, 0.25, 8),
-            new THREE.MeshStandardMaterial({ color: 0xc77d2b })
+        const rampMesh = new THREE.Mesh(
+            rampGeometry,
+            new THREE.MeshStandardMaterial({ color: 0xa86a21, roughness: 0.82 })
         );
-        slope.position.set(0, 0.95, 0);
-        slope.rotation.x = -0.28;
-        slope.castShadow = true;
-        slope.receiveShadow = true;
-        group.add(slope);
+        rampMesh.castShadow = true;
+        rampMesh.receiveShadow = true;
+        group.add(rampMesh);
+        group.userData.surfaceMesh = rampMesh;
 
         group.position.set(object.x, 0, object.z);
         group.rotation.y = object.rotation;
@@ -860,20 +1126,202 @@
         for (const object of map.objects) {
             const mesh = object.type === 'ramp' ? createRampMesh(object) : createWaterMesh(object);
             scene.add(mesh);
-            mapObjectMeshes.push({ object, mesh });
+            const entry = { object, mesh };
+            mapObjectMeshes.push(entry);
+            if (object.type === 'ramp' && mesh.userData.surfaceMesh) {
+                collidableSurfaces.push(mesh.userData.surfaceMesh);
+                surfaceMeshToEntry.set(mesh.userData.surfaceMesh.uuid, entry);
+            }
         }
+        buildMissionVisuals(map);
+    }
+
+    function createDisplayCar(color = 0x5c6bc0) {
+        const group = new THREE.Group();
+        const shell = new THREE.Mesh(
+            new THREE.BoxGeometry(2.3, 0.6, 4.3),
+            new THREE.MeshStandardMaterial({ color, roughness: 0.78, metalness: 0.08 })
+        );
+        shell.position.y = 0.55;
+        shell.castShadow = true;
+        shell.receiveShadow = true;
+        group.add(shell);
+
+        const cabin = new THREE.Mesh(
+            new THREE.BoxGeometry(1.6, 0.5, 1.8),
+            new THREE.MeshStandardMaterial({ color: 0x1d2630, roughness: 0.28, metalness: 0.12 })
+        );
+        cabin.position.set(0, 0.98, -0.1);
+        cabin.castShadow = true;
+        group.add(cabin);
+
+        const wheelOffsets = [
+            [-0.95, 0.26, 1.35],
+            [0.95, 0.26, 1.35],
+            [-0.95, 0.26, -1.35],
+            [0.95, 0.26, -1.35]
+        ];
+        for (const [x, y, z] of wheelOffsets) {
+            const wheel = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.42, 0.42, 0.36, 14),
+                new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.9 })
+            );
+            wheel.rotation.z = Math.PI / 2;
+            wheel.position.set(x, y, z);
+            wheel.castShadow = true;
+            group.add(wheel);
+        }
+
+        return group;
+    }
+
+    function buildMissionVisuals(map) {
+        if (!map.mission || map.mission.type !== 'jump-zone') return;
+
+        const landingZone = map.mission.landingZone;
+        const zone = new THREE.Mesh(
+            new THREE.PlaneGeometry(landingZone.width, landingZone.depth),
+            new THREE.MeshStandardMaterial({
+                color: 0x2ecc71,
+                transparent: true,
+                opacity: 0.72,
+                emissive: 0x0b5d2a,
+                emissiveIntensity: 0.35
+            })
+        );
+        zone.rotation.x = -Math.PI / 2;
+        zone.rotation.z = -landingZone.rotation;
+        zone.position.set(landingZone.x, 0.03, landingZone.z);
+        zone.receiveShadow = true;
+        scene.add(zone);
+        missionMeshes.push(zone);
+
+        const failMarker = new THREE.Mesh(
+            new THREE.PlaneGeometry(landingZone.width + 10, 1.2),
+            new THREE.MeshStandardMaterial({ color: 0xff5252, transparent: true, opacity: 0.75 })
+        );
+        failMarker.rotation.x = -Math.PI / 2;
+        failMarker.rotation.z = -landingZone.rotation;
+        failMarker.position.set(landingZone.x, 0.035, landingZone.z + ((landingZone.depth / 2) + map.mission.failLineOffset));
+        scene.add(failMarker);
+        missionMeshes.push(failMarker);
+
+        map.mission.obstacleCars.forEach((car, index) => {
+            const obstacle = createDisplayCar(index % 2 === 0 ? 0xff7043 : 0x29b6f6);
+            obstacle.position.set(car.x, 0, car.z);
+            obstacle.rotation.y = car.rotation || 0;
+            scene.add(obstacle);
+            missionMeshes.push(obstacle);
+        });
+    }
+
+    function moveTowards(value, target, maxDelta) {
+        if (value < target) return Math.min(value + maxDelta, target);
+        if (value > target) return Math.max(value - maxDelta, target);
+        return target;
+    }
+
+    function getWheelSamplePosition(localX, localZ, angle) {
+        const sin = Math.sin(angle);
+        const cos = Math.cos(angle);
+        return new THREE.Vector3(
+            carGroup.position.x + (localX * cos) + (localZ * sin),
+            carGroup.position.y,
+            carGroup.position.z + (-localX * sin) + (localZ * cos)
+        );
+    }
+
+    function getWheelSurfaces(angle) {
+        return wheelSpinTargets.map((wheelTarget) => ({
+            wheelTarget,
+            ...sampleSurfaceAt(getWheelSamplePosition(wheelTarget.localX, wheelTarget.localZ, angle), angle)
+        }));
+    }
+
+    function getSupportState(angle) {
+        const wheelSurfaces = getWheelSurfaces(angle);
+        const [frontLeft, frontRight, rearLeft, rearRight] = wheelSurfaces;
+        const frontHeight = (frontLeft.height + frontRight.height) / 2;
+        const rearHeight = (rearLeft.height + rearRight.height) / 2;
+        const leftHeight = (frontLeft.height + rearLeft.height) / 2;
+        const rightHeight = (frontRight.height + rearRight.height) / 2;
+        const targetPitch = THREE.MathUtils.clamp(
+            -Math.atan2(frontHeight - rearHeight, frontAxleZ - rearAxleZ),
+            -0.95,
+            0.7
+        );
+        const targetRoll = THREE.MathUtils.clamp(
+            Math.atan2(rightHeight - leftHeight, wheelOffsetX * 2),
+            -0.5,
+            0.5
+        );
+
+        supportEuler.set(targetPitch, 0, targetRoll, 'YXZ');
+        supportMatrix.makeRotationFromEuler(supportEuler);
+
+        let supportHeight = 0;
+        for (const surface of wheelSurfaces) {
+            const rotatedOffset = new THREE.Vector3(
+                surface.wheelTarget.localX,
+                surface.wheelTarget.baseY,
+                surface.wheelTarget.localZ
+            ).applyMatrix4(supportMatrix);
+            supportHeight += surface.height + wheelRadius - rotatedOffset.y;
+        }
+        supportHeight /= wheelSurfaces.length;
+
+        let dominantSurface = null;
+        for (const surface of wheelSurfaces) {
+            if (!surface.contact) continue;
+            if (!dominantSurface || surface.progress > dominantSurface.progress) {
+                dominantSurface = surface;
+            }
+        }
+
+        return { wheelSurfaces, supportHeight, targetPitch, targetRoll, dominantSurface };
+    }
+
+    function setWheelContactHeight(wheelTarget, surfaceHeight) {
+        const rotationMatrix = new THREE.Matrix4().makeRotationFromEuler(
+            new THREE.Euler(physics.pitch, physics.angle, physics.roll, 'YXZ')
+        );
+        const baseVector = new THREE.Vector3(wheelTarget.localX, 0, wheelTarget.localZ).applyMatrix4(rotationMatrix);
+        const upVector = new THREE.Vector3(0, 1, 0).applyMatrix4(rotationMatrix);
+        const desiredWorldY = surfaceHeight + wheelRadius;
+        const localY = (desiredWorldY - carGroup.position.y - baseVector.y) / Math.max(upVector.y, 0.0001);
+        wheelTarget.steeringPivot.position.y = THREE.MathUtils.clamp(localY, wheelTarget.baseY - 0.04, wheelTarget.baseY + 0.32);
     }
 
     function resetCar() {
-        carGroup.position.set(-20, 0, -25);
-        carGroup.rotation.y = Math.PI;
+        const currentMap = getCurrentMap();
+        const start = currentMap?.start || { x: -20, z: -25, angle: Math.PI };
+        carGroup.position.set(start.x, wheelRadius, start.z);
+        carGroup.rotation.set(0, start.angle, 0);
         physics.speed = 0;
-        physics.angle = Math.PI;
+        physics.angle = start.angle;
         physics.velocityX = 0;
         physics.velocityZ = 0;
         physics.verticalVelocity = 0;
         physics.onGround = true;
+        physics.pitch = 0;
+        physics.pitchVelocity = 0;
+        physics.roll = 0;
+        physics.rampContactId = null;
+        physics.rampProgress = 0;
+        physics.rampAngle = 0;
+        physics.rampHeight = 0;
+        physics.rampAlignment = 0;
+        physics.justLaunched = false;
         appState.topSpeed = 0;
+        appState.missionState = currentMap?.mission ? { airborne: false, completed: false, failed: false } : null;
+        const startSupport = getSupportState(physics.angle);
+        carGroup.position.y = startSupport.supportHeight;
+        physics.pitch = startSupport.targetPitch;
+        physics.roll = startSupport.targetRoll;
+        carGroup.rotation.set(physics.pitch, physics.angle, physics.roll, 'YXZ');
+        for (const surface of startSupport.wheelSurfaces) {
+            setWheelContactHeight(surface.wheelTarget, surface.height);
+        }
     }
 
     function clearEffects() {
@@ -896,6 +1344,42 @@
         buildMapObjects(map);
         resetCar();
         clearEffects();
+    }
+
+    function isPointInsideLandingZone(point, zone) {
+        const local = new THREE.Vector3(point.x - zone.x, 0, point.z - zone.z);
+        local.applyAxisAngle(new THREE.Vector3(0, 1, 0), -zone.rotation);
+        return Math.abs(local.x) <= zone.width / 2 && Math.abs(local.z) <= zone.depth / 2;
+    }
+
+    function isPointBeforeLandingZone(point, mission) {
+        const zone = mission.landingZone;
+        const local = new THREE.Vector3(point.x - zone.x, 0, point.z - zone.z);
+        local.applyAxisAngle(new THREE.Vector3(0, 1, 0), -zone.rotation);
+        return local.z > (zone.depth / 2) + mission.failLineOffset;
+    }
+
+    function updateMissionStatus() {
+        if (appState.mode !== 'drive' || appState.testDriveActive) return;
+        const map = getCurrentMap();
+        if (!map?.mission || map.mission.type !== 'jump-zone') return;
+        const missionState = appState.missionState;
+        if (!missionState) return;
+
+        if (missionState.completed) {
+            setStatus(map.mission.title, 'Perfekt landning. Du klarade stuntbanan.');
+            return;
+        }
+        if (missionState.failed) {
+            setStatus(map.mission.title, 'Du landade for tidigt. Ta mer fart och traffa den grona zonen.');
+            return;
+        }
+
+        if (missionState.airborne) {
+            setStatus(map.mission.title, map.mission.description);
+        } else {
+            setStatus(map.mission.title, 'Ta fart mot rampen och hoppa over bilarna in i den grona zonen.');
+        }
     }
 
     function spawnSmoke(x, y, z) {
@@ -938,7 +1422,9 @@
             if (entry.object.type !== 'ramp') continue;
 
             const local = entry.mesh.worldToLocal(position.clone());
-            if (Math.abs(local.x) <= 3 && Math.abs(local.z) <= 4) {
+            const halfWidth = 3;
+            const halfLength = (entry.object.rampLength || 8) / 2;
+            if (Math.abs(local.x) <= halfWidth && Math.abs(local.z) <= halfLength) {
                 return { entry, local };
             }
         }
@@ -955,48 +1441,155 @@
         return null;
     }
 
+    function sampleSurfaceAt(position, carAngle) {
+        const origin = new THREE.Vector3(position.x, 50, position.z);
+        surfaceRaycaster.set(origin, new THREE.Vector3(0, -1, 0));
+        const hits = surfaceRaycaster.intersectObjects(collidableSurfaces, false);
+        const hit = hits[0];
+        if (!hit) {
+            return { height: 0, pitch: 0, contact: false, progress: 0, angle: 0, rampHeight: 0, alignment: 0, contactId: null };
+        }
+
+        const entry = surfaceMeshToEntry.get(hit.object.uuid);
+        if (!entry) {
+            return { height: hit.point.y, pitch: 0, contact: false, progress: 0, angle: 0, rampHeight: 0, alignment: 0, contactId: null };
+        }
+
+        const localPoint = entry.mesh.worldToLocal(hit.point.clone());
+        const rampLength = entry.object.rampLength || 8;
+        const rampHeight = entry.object.rampHeight || 2;
+        const rampProgress = THREE.MathUtils.clamp(((rampLength / 2) - localPoint.z) / rampLength, 0, 1);
+        const rampAngle = Math.atan2(rampHeight, rampLength);
+        const rampForward = new THREE.Vector3(0, 0, -1).applyQuaternion(entry.mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
+        const carForward = new THREE.Vector3(Math.sin(carAngle), 0, Math.cos(carAngle)).normalize();
+        const alignment = rampForward.dot(carForward);
+
+        return {
+            height: hit.point.y,
+            pitch: -rampAngle * THREE.MathUtils.clamp(alignment, -1, 1),
+            contact: true,
+            progress: rampProgress,
+            angle: rampAngle,
+            rampHeight,
+            alignment,
+            contactId: entry.object.id
+        };
+    }
+
+    function resolveRampSurfaceCollisions() {
+        const carCollisionRadius = 0.78;
+        const carCollisionBottom = carGroup.position.y + 0.18;
+        const carCollisionTop = carGroup.position.y + 1.18;
+
+        for (const entry of mapObjectMeshes) {
+            if (entry.object.type !== 'ramp') continue;
+
+            const rampLength = entry.object.rampLength || 8;
+            const rampHeight = entry.object.rampHeight || 2;
+            const halfLength = rampLength / 2;
+            const halfWidth = 3;
+            const localPoint = entry.mesh.worldToLocal(new THREE.Vector3(
+                carGroup.position.x,
+                carCollisionBottom,
+                carGroup.position.z
+            ));
+            const insideRampFootprint =
+                Math.abs(localPoint.x) <= halfWidth &&
+                localPoint.z >= -halfLength &&
+                localPoint.z <= halfLength;
+
+            // When the car is already on the ramp footprint, vertical wheel support
+            // should carry it up the slope instead of the side-collision solver
+            // pushing it horizontally away from the ramp body.
+            if (insideRampFootprint) continue;
+
+            const closestX = THREE.MathUtils.clamp(localPoint.x, -halfWidth, halfWidth);
+            const closestZ = THREE.MathUtils.clamp(localPoint.z, -halfLength, halfLength);
+            const deltaX = localPoint.x - closestX;
+            const deltaZ = localPoint.z - closestZ;
+            const horizontalDistanceSq = (deltaX * deltaX) + (deltaZ * deltaZ);
+            const surfaceAtClosestZ = THREE.MathUtils.clamp((halfLength - closestZ) / rampLength, 0, 1) * rampHeight;
+            const overlapsVertically = carCollisionBottom < surfaceAtClosestZ && carCollisionTop > 0;
+
+            if (!overlapsVertically || horizontalDistanceSq >= carCollisionRadius * carCollisionRadius) continue;
+
+            let localNormalX = 0;
+            let localNormalZ = 0;
+            let penetration = 0;
+
+            if (horizontalDistanceSq > 1e-6) {
+                const horizontalDistance = Math.sqrt(horizontalDistanceSq);
+                localNormalX = deltaX / horizontalDistance;
+                localNormalZ = deltaZ / horizontalDistance;
+                penetration = carCollisionRadius - horizontalDistance;
+            } else {
+                const distanceToSideX = halfWidth - Math.abs(localPoint.x);
+                const distanceToSideZ = halfLength - Math.abs(localPoint.z);
+                if (distanceToSideX < distanceToSideZ) {
+                    localNormalX = localPoint.x >= 0 ? 1 : -1;
+                    penetration = carCollisionRadius + distanceToSideX;
+                } else {
+                    localNormalZ = localPoint.z >= 0 ? 1 : -1;
+                    penetration = carCollisionRadius + distanceToSideZ;
+                }
+            }
+
+            const worldNormal = new THREE.Vector3(localNormalX, 0, localNormalZ)
+                .transformDirection(entry.mesh.matrixWorld)
+                .normalize();
+
+            carGroup.position.addScaledVector(worldNormal, penetration + 0.01);
+
+            const intoSurface = (physics.velocityX * worldNormal.x) + (physics.velocityZ * worldNormal.z);
+            if (intoSurface < 0) {
+                physics.velocityX -= worldNormal.x * intoSurface;
+                physics.velocityZ -= worldNormal.z * intoSurface;
+            }
+        }
+    }
+
     function updatePhysics(delta) {
         if (appState.mode !== 'drive') {
             engineAudio.volume = THREE.MathUtils.lerp(engineAudio.volume, 0, 4 * delta);
             driftAudio.volume = THREE.MathUtils.lerp(driftAudio.volume, 0, 4 * delta);
             return;
         }
+        const water = findWaterAtPosition(carGroup.position);
+        const previousRampContactId = physics.rampContactId;
+        const previousRampProgress = physics.rampProgress;
+        const previousRampAngle = physics.rampAngle;
+        const previousRampHeight = physics.rampHeight;
+        const previousRampAlignment = physics.rampAlignment;
+
+        const currentAcceleration = physics.onGround ? physics.acceleration : physics.acceleration * 0.2;
+        const currentBraking = physics.onGround ? physics.braking : physics.braking * 0.3;
+        const currentFriction = water ? physics.friction * 0.5 : physics.friction;
 
         if (input.forward) {
-            physics.speed += physics.acceleration * delta;
+            physics.speed += currentAcceleration * delta;
         } else if (input.backward) {
-            physics.speed -= physics.braking * delta;
+            physics.speed -= currentBraking * delta;
         } else {
-            if (physics.speed > physics.autoDriveSpeed) {
-                physics.speed -= physics.friction * delta;
-            } else if (physics.speed < physics.autoDriveSpeed && physics.speed >= 0) {
-                physics.speed += physics.friction * delta * 0.5;
-            }
+            physics.speed = moveTowards(physics.speed, 0, currentFriction * delta);
         }
 
-        const water = findWaterAtPosition(carGroup.position);
-        const surfaceFriction = water ? 7.5 : physics.friction;
-        if (!input.forward && !input.backward && physics.speed > physics.autoDriveSpeed) {
-            physics.speed -= (surfaceFriction - physics.friction) * delta;
-        }
         if (water) {
-            physics.speed *= 1 - (0.9 * delta);
+            physics.speed *= 1 - (0.22 * delta);
         }
 
-        physics.speed = THREE.MathUtils.clamp(physics.speed, -10, physics.maxSpeed);
+        physics.speed = THREE.MathUtils.clamp(physics.speed, -8, physics.maxSpeed);
 
-        const isReversing = physics.speed < 0 ? -1 : 1;
-        if (Math.abs(physics.speed) > 0.1) {
-            if (input.left) physics.angle += physics.turnSpeed * delta * isReversing;
-            if (input.right) physics.angle -= physics.turnSpeed * delta * isReversing;
+        const steeringScale = physics.onGround ? 1 : 0.28;
+        const steeringSpeedFactor = THREE.MathUtils.clamp(Math.abs(physics.speed) / 18, 0.18, 1);
+        const steeringDirection = physics.speed < 0 ? -1 : 1;
+        if (Math.abs(physics.speed) > 0.08) {
+            if (input.left) physics.angle += physics.turnSpeed * steeringSpeedFactor * steeringDirection * steeringScale * delta;
+            if (input.right) physics.angle -= physics.turnSpeed * steeringSpeedFactor * steeringDirection * steeringScale * delta;
         }
 
-        const targetDirX = Math.sin(physics.angle);
-        const targetDirZ = Math.cos(physics.angle);
-        const targetVelX = targetDirX * physics.speed;
-        const targetVelZ = targetDirZ * physics.speed;
-
-        const grip = water ? 2.2 : 3.5;
+        const targetVelX = Math.sin(physics.angle) * physics.speed;
+        const targetVelZ = Math.cos(physics.angle) * physics.speed;
+        const grip = physics.onGround ? (water ? 1.1 : 4.6) : 0.75;
         physics.velocityX = THREE.MathUtils.lerp(physics.velocityX, targetVelX, grip * delta);
         physics.velocityZ = THREE.MathUtils.lerp(physics.velocityZ, targetVelZ, grip * delta);
 
@@ -1004,33 +1597,104 @@
         carGroup.position.z += physics.velocityZ * delta;
         carGroup.position.x = THREE.MathUtils.clamp(carGroup.position.x, mapBounds.min, mapBounds.max);
         carGroup.position.z = THREE.MathUtils.clamp(carGroup.position.z, mapBounds.min, mapBounds.max);
-        carGroup.rotation.y = physics.angle;
+        resolveRampSurfaceCollisions();
 
-        const rampHit = findRampAtPosition(carGroup.position);
-        let groundHeight = 0;
-        if (rampHit) {
-            groundHeight = THREE.MathUtils.clamp((rampHit.local.z + 4) / 8, 0, 1) * 1.8;
-            if (groundHeight > 1.55 && physics.onGround && Math.abs(physics.speed) > 10) {
-                physics.verticalVelocity = 10 + Math.abs(physics.speed) * 0.12;
-                physics.onGround = false;
-            }
+        const supportState = getSupportState(physics.angle);
+        const currentSpeed = Math.sqrt((physics.velocityX ** 2) + (physics.velocityZ ** 2));
+
+        if (supportState.dominantSurface) {
+            physics.rampContactId = supportState.dominantSurface.contactId;
+            physics.rampProgress = supportState.dominantSurface.progress;
+            physics.rampAngle = supportState.dominantSurface.angle;
+            physics.rampHeight = supportState.dominantSurface.rampHeight;
+            physics.rampAlignment = supportState.dominantSurface.alignment;
+        } else {
+            physics.rampContactId = null;
+            physics.rampProgress = 0;
+            physics.rampAngle = 0;
+            physics.rampHeight = 0;
+            physics.rampAlignment = 0;
         }
 
-        if (!physics.onGround || carGroup.position.y > groundHeight) {
+        const shouldLaunch =
+            physics.onGround &&
+            previousRampContactId &&
+            !physics.rampContactId &&
+            previousRampProgress > 0.9 &&
+            previousRampAlignment > 0.55 &&
+            currentSpeed > 8;
+
+        if (shouldLaunch) {
+            physics.onGround = false;
+            physics.justLaunched = true;
+            if (appState.missionState) {
+                appState.missionState.airborne = true;
+            }
+            physics.verticalVelocity = Math.max(
+                physics.verticalVelocity,
+                (Math.sin(previousRampAngle) * currentSpeed * 0.9) + (previousRampHeight * 0.35) + 1.4
+            );
+            physics.pitchVelocity = -previousRampAngle * 2.1;
+        }
+
+        if (physics.onGround) {
+            carGroup.position.y = THREE.MathUtils.lerp(
+                carGroup.position.y,
+                supportState.supportHeight,
+                Math.min(1, 14 * delta)
+            );
+            physics.verticalVelocity = 0;
+            physics.pitchVelocity = 0;
+            physics.pitch = THREE.MathUtils.lerp(physics.pitch, supportState.targetPitch, Math.min(1, 11 * delta));
+            physics.roll = THREE.MathUtils.lerp(physics.roll, supportState.targetRoll, Math.min(1, 11 * delta));
+            physics.justLaunched = false;
+        } else {
             physics.verticalVelocity -= physics.gravity * delta;
             carGroup.position.y += physics.verticalVelocity * delta;
-            if (carGroup.position.y <= groundHeight) {
-                carGroup.position.y = groundHeight;
+            physics.pitchVelocity += ((-physics.verticalVelocity * 0.018) - (physics.pitch * 0.65)) * delta;
+            physics.pitchVelocity *= 1 - (0.8 * delta);
+            physics.pitch = THREE.MathUtils.clamp(physics.pitch + physics.pitchVelocity * delta, -0.85, 0.65);
+            physics.roll = THREE.MathUtils.lerp(physics.roll, 0, 2.2 * delta);
+
+            if (carGroup.position.y <= supportState.supportHeight && physics.verticalVelocity <= 0) {
+                const impactVelocity = Math.abs(physics.verticalVelocity);
+                carGroup.position.y = supportState.supportHeight;
                 physics.verticalVelocity = 0;
                 physics.onGround = true;
+                physics.justLaunched = false;
+                physics.pitchVelocity = 0;
+                physics.pitch = supportState.targetPitch;
+                physics.roll = supportState.targetRoll;
+                physics.speed *= 1 - (THREE.MathUtils.clamp((impactVelocity - 4) / 18, 0, 1) * 0.14);
+                if (impactVelocity > 5.5) {
+                    spawnSmoke(
+                        carGroup.position.x + (Math.random() - 0.5),
+                        0.22 + carGroup.position.y,
+                        carGroup.position.z + (Math.random() - 0.5)
+                    );
+                }
+
+                const map = getCurrentMap();
+                if (appState.missionState?.airborne && map?.mission?.type === 'jump-zone') {
+                    const landingPoint = { x: carGroup.position.x, z: carGroup.position.z };
+                    if (isPointInsideLandingZone(landingPoint, map.mission.landingZone)) {
+                        appState.missionState.completed = true;
+                    } else if (isPointBeforeLandingZone(landingPoint, map.mission)) {
+                        appState.missionState.failed = true;
+                        appState.missionState.airborne = false;
+                        physics.speed = 0;
+                    } else {
+                        appState.missionState.airborne = false;
+                    }
+                }
             }
-        } else {
-            carGroup.position.y = groundHeight;
-            physics.verticalVelocity = 0;
-            physics.onGround = true;
         }
 
-        const currentSpeed = Math.sqrt(physics.velocityX ** 2 + physics.velocityZ ** 2);
+        carGroup.rotation.set(physics.pitch, physics.angle, physics.roll, 'YXZ');
+        for (const surface of supportState.wheelSurfaces) {
+            setWheelContactHeight(surface.wheelTarget, surface.height);
+        }
+
         const moveDirAngle = Math.atan2(physics.velocityX, physics.velocityZ);
         let slip = Math.abs(physics.angle - moveDirAngle);
         slip = Math.atan2(Math.sin(slip), Math.cos(slip));
@@ -1054,6 +1718,21 @@
         } else {
             carBody.position.x = 0;
         }
+
+        const wheelRotationDelta = currentSpeed * delta / wheelRadius;
+        const steerTarget = physics.onGround ? ((input.left ? 0.45 : 0) + (input.right ? -0.45 : 0)) : 0;
+        for (const wheelTarget of wheelSpinTargets) {
+            if (wheelTarget.front) {
+                wheelTarget.steeringPivot.rotation.y = THREE.MathUtils.lerp(
+                    wheelTarget.steeringPivot.rotation.y,
+                    steerTarget,
+                    Math.min(1, 10 * delta)
+                );
+            }
+            wheelTarget.spinPivot.rotation.x -= wheelRotationDelta * Math.sign(physics.speed || 1);
+        }
+
+        updateMissionStatus();
     }
 
     function updateCamera() {
@@ -1115,6 +1794,7 @@
         toolRamp.classList.toggle('active', appState.selectedTool === 'ramp');
         toolWater.classList.toggle('active', appState.selectedTool === 'water');
         toolDelete.classList.toggle('active', appState.selectedTool === 'delete');
+        rampSettings.classList.toggle('hidden', appState.selectedTool !== 'ramp');
 
         placementPreview.visible = appState.mode === 'editor' && appState.selectedTool !== 'delete';
         if (appState.selectedTool === 'water') {
@@ -1123,7 +1803,7 @@
             placementPreview.material.color.set(0x48b8ff);
         } else {
             placementPreview.geometry.dispose();
-            placementPreview.geometry = new THREE.BoxGeometry(6, 0.5, 8);
+            placementPreview.geometry = new THREE.BoxGeometry(6, Math.max(appState.rampHeight * 0.25, 0.5), appState.rampLength);
             placementPreview.material.color.set(0xffb100);
         }
     }
@@ -1185,6 +1865,8 @@
         }
 
         editorMapName.value = appState.editorMap.name;
+        rampLengthInput.value = String(appState.rampLength);
+        rampHeightInput.value = String(appState.rampHeight);
         buildMapObjects(appState.editorMap);
         resetCar();
         resetEditorCamera();
@@ -1253,7 +1935,7 @@
             const entry = mapObjectMeshes[index];
             if (entry.object.type === 'ramp') {
                 const local = entry.mesh.worldToLocal(point.clone());
-                if (Math.abs(local.x) <= 3.5 && Math.abs(local.z) <= 4.5) return entry.object.id;
+                if (Math.abs(local.x) <= 3.5 && Math.abs(local.z) <= ((entry.object.rampLength || 8) / 2) + 0.5) return entry.object.id;
             } else {
                 const dx = point.x - entry.object.x;
                 const dz = point.z - entry.object.z;
@@ -1280,7 +1962,9 @@
             type: appState.selectedTool,
             x: Math.round(point.x),
             z: Math.round(point.z),
-            rotation: appState.selectedTool === 'ramp' ? appState.placementRotation : 0
+            rotation: appState.selectedTool === 'ramp' ? appState.placementRotation : 0,
+            rampLength: appState.selectedTool === 'ramp' ? appState.rampLength : undefined,
+            rampHeight: appState.selectedTool === 'ramp' ? appState.rampHeight : undefined
         };
         appState.editorMap.objects.push(object);
         buildMapObjects(appState.editorMap);
@@ -1293,7 +1977,11 @@
         if (appState.mode !== 'editor' || appState.selectedTool === 'delete') return;
         const point = screenToGround(clientX, clientY);
         if (!point) return;
-        placementPreview.position.set(Math.round(point.x), appState.selectedTool === 'water' ? 0.16 : 0.4, Math.round(point.z));
+        placementPreview.position.set(
+            Math.round(point.x),
+            appState.selectedTool === 'water' ? 0.16 : Math.max(appState.rampHeight * 0.125, 0.4),
+            Math.round(point.z)
+        );
         placementPreview.rotation.set(0, appState.placementRotation, 0);
     }
 
@@ -1523,6 +2211,20 @@
     rotateRightButton.addEventListener('click', () => {
         appState.placementRotation += Math.PI / 12;
         updatePlacementPreview(window.innerWidth / 2, window.innerHeight / 2);
+    });
+
+    rampLengthInput.addEventListener('input', () => {
+        appState.rampLength = THREE.MathUtils.clamp(Number(rampLengthInput.value) || 8, rampLimits.minLength, rampLimits.maxLength);
+        rampLengthInput.value = String(appState.rampLength);
+        updateToolButtons();
+        updatePlacementPreview(lastPointerPosition.x, lastPointerPosition.y);
+    });
+
+    rampHeightInput.addEventListener('input', () => {
+        appState.rampHeight = THREE.MathUtils.clamp(Number(rampHeightInput.value) || 2, rampLimits.minHeight, rampLimits.maxHeight);
+        rampHeightInput.value = String(appState.rampHeight);
+        updateToolButtons();
+        updatePlacementPreview(lastPointerPosition.x, lastPointerPosition.y);
     });
 
     saveMapButton.addEventListener('click', saveEditorMap);
