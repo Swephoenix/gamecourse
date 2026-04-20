@@ -3,53 +3,424 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minimal 3D Drift Racing</title>
+    <title>Drift Racing</title>
     <style>
+        :root {
+            color-scheme: dark;
+            --panel: rgba(12, 18, 30, 0.88);
+            --panel-strong: rgba(8, 12, 20, 0.94);
+            --border: rgba(255, 255, 255, 0.14);
+            --accent: #ffb100;
+            --accent-2: #48b8ff;
+            --danger: #ff5b5b;
+            --text: #f4f6fb;
+            --muted: #b8c0d4;
+        }
+
+        * { box-sizing: border-box; }
+
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #87CEEB; /* Himmel */
-            touch-action: none; /* Förhindrar zoom/scroll på mobil */
-            font-family: sans-serif;
+            background: linear-gradient(180deg, #87ceeb 0%, #c3f1ff 100%);
+            touch-action: none;
+            font-family: Arial, sans-serif;
+            color: var(--text);
         }
-        #game-container { width: 100vw; height: 100vh; display: block; }
-        
-        /* UI Kontroller */
+
+        canvas {
+            display: block;
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 20;
+            display: none;
+        }
+
+        .overlay.visible {
+            display: block;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            box-shadow: 0 22px 60px rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(14px);
+        }
+
+        #main-menu {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: radial-gradient(circle at top, rgba(255, 255, 255, 0.18), rgba(10, 20, 30, 0.74));
+        }
+
+        #main-menu.visible {
+            display: flex;
+        }
+
+        #main-menu .panel {
+            width: min(92vw, 520px);
+            padding: 24px;
+        }
+
+        h1, h2, h3, p {
+            margin: 0;
+        }
+
+        .stack {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .mode-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 14px;
+            margin-top: 18px;
+        }
+
+        .mode-card {
+            padding: 18px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.04);
+            cursor: pointer;
+            transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+        }
+
+        .mode-card:hover,
+        .mode-card.selected {
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        .mode-card strong {
+            display: block;
+            font-size: 1.05rem;
+            margin-bottom: 8px;
+        }
+
+        .mode-card span {
+            color: var(--muted);
+            line-height: 1.4;
+            font-size: 0.95rem;
+        }
+
+        label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        select,
+        input,
+        button {
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            font: inherit;
+            padding: 12px 14px;
+        }
+
+        button {
+            cursor: pointer;
+            transition: background 0.18s ease, transform 0.18s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.14);
+        }
+
+        button.primary {
+            background: linear-gradient(135deg, var(--accent), #ff7f11);
+            color: #111;
+            border: 0;
+            font-weight: 700;
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, var(--accent-2), #2f7bff);
+            color: #08111e;
+            border: 0;
+            font-weight: 700;
+        }
+
+        button.danger {
+            background: rgba(255, 91, 91, 0.2);
+            border-color: rgba(255, 91, 91, 0.35);
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        #top-bar {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            right: 12px;
+            z-index: 12;
+            display: none;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        #top-bar.visible {
+            display: flex;
+        }
+
+        #status-card,
+        #editor-panel {
+            pointer-events: auto;
+            padding: 14px 16px;
+        }
+
+        #status-card {
+            min-width: 220px;
+            max-width: 360px;
+        }
+
+        #status-card p {
+            margin-top: 6px;
+            color: var(--muted);
+            line-height: 1.35;
+            font-size: 0.92rem;
+        }
+
+        #speedometer {
+            margin-top: 12px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04));
+            color: var(--text);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            display: none;
+        }
+
+        #speedometer.visible {
+            display: block;
+        }
+
+        #speedometer.speed-warning {
+            background: linear-gradient(180deg, rgba(255, 177, 0, 0.22), rgba(255, 127, 17, 0.12));
+            box-shadow: inset 0 0 0 1px rgba(255, 177, 0, 0.18);
+        }
+
+        #speedometer.speed-critical {
+            background: linear-gradient(180deg, rgba(255, 91, 91, 0.24), rgba(255, 91, 91, 0.12));
+            box-shadow: inset 0 0 0 1px rgba(255, 91, 91, 0.25);
+        }
+
+        .speedometer-label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            color: var(--muted);
+            letter-spacing: 0.12em;
+        }
+
+        .speedometer-value {
+            margin-top: 4px;
+            font-size: 2rem;
+            line-height: 1;
+        }
+
+        .speedometer-meta {
+            margin-top: 6px;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 0.82rem;
+            color: var(--muted);
+        }
+
+        #editor-panel {
+            width: min(92vw, 420px);
+            display: none;
+        }
+
+        #editor-panel.visible {
+            display: block;
+        }
+
+        .tool-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .tool-row button.active {
+            background: rgba(255, 177, 0, 0.22);
+            border-color: rgba(255, 177, 0, 0.45);
+        }
+
+        #editor-help,
+        #save-feedback {
+            font-size: 0.9rem;
+            color: var(--muted);
+            line-height: 1.4;
+        }
+
+        #save-feedback {
+            min-height: 20px;
+        }
+
         #ui-layer {
             position: absolute;
-            bottom: 0; left: 0; width: 100%; height: 30%;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 32%;
             pointer-events: none;
-            display: flex;
+            display: none;
             justify-content: space-between;
             align-items: flex-end;
             padding: 20px;
-            box-sizing: border-box;
             z-index: 10;
         }
-        .btn-group { display: flex; gap: 10px; pointer-events: auto; }
-        .btn {
-            width: 70px; height: 70px;
-            background: rgba(255, 255, 255, 0.3);
-            border: 2px solid rgba(255, 255, 255, 0.7);
-            border-radius: 50%;
-            display: flex; justify-content: center; align-items: center;
-            font-size: 24px; font-weight: bold; color: white;
-            user-select: none; -webkit-user-select: none;
+
+        #ui-layer.visible {
+            display: flex;
         }
-        .btn:active, .btn.active { background: rgba(255, 255, 255, 0.7); color: black; }
-        
-        #instructions {
-            position: absolute; top: 10px; left: 0; width: 100%;
-            text-align: center; color: white; text-shadow: 1px 1px 2px black;
-            pointer-events: none; z-index: 10;
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+        }
+
+        .btn {
+            width: 72px;
+            height: 72px;
+            background: rgba(255, 255, 255, 0.28);
+            border: 2px solid rgba(255, 255, 255, 0.72);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .btn:active,
+        .btn.active {
+            background: rgba(255, 255, 255, 0.78);
+            color: black;
+        }
+
+        @media (max-width: 760px) {
+            #top-bar {
+                flex-direction: column;
+            }
+
+            #editor-panel {
+                width: 100%;
+            }
         }
     </style>
 </head>
 <body>
+<div id="main-menu" class="overlay visible">
+    <div class="panel stack">
+        <div class="stack" style="gap: 8px;">
+            <h1>Drift Racing</h1>
+            <p style="color: var(--muted); line-height: 1.45;">
+                Välj om du vill köra en bana eller bygga en egen karta med ramper och vattenbassänger.
+            </p>
+        </div>
 
-<div id="instructions">
-    <h2>Drift Racing</h2>
-    <p>Mobil: Använd knapparna | Desktop: Piltangenter/WASD</p>
+        <div class="mode-grid">
+            <button class="mode-card selected" data-mode="drive" type="button">
+                <strong>Drive Mode</strong>
+                <span>Välj karta och kör direkt.</span>
+            </button>
+            <button class="mode-card" data-mode="editor" type="button">
+                <strong>Editor Mode</strong>
+                <span>Placera ut objekt och spara banan lokalt.</span>
+            </button>
+        </div>
+
+        <label>
+            Välj karta
+            <select id="menu-map-select"></select>
+        </label>
+
+        <label>
+            Kartnamn för editor
+            <input id="menu-map-name" type="text" placeholder="t.ex. Hamnbanan">
+        </label>
+
+        <div class="button-row">
+            <button id="start-button" class="primary" type="button">Starta</button>
+        </div>
+    </div>
+</div>
+
+<div id="top-bar">
+    <div id="status-card" class="panel">
+        <h3 id="status-title">Drive Mode</h3>
+        <p id="status-text">Välj en karta i menyn.</p>
+        <div id="speedometer">
+            <div class="speedometer-label">Hastighet</div>
+            <div id="speedometer-value" class="speedometer-value">0 km/h</div>
+            <div class="speedometer-meta">
+                <span id="speedometer-top">Topp: 0 km/h</span>
+                <span id="speedometer-max">Max: 400 km/h</span>
+            </div>
+        </div>
+        <div class="button-row" style="margin-top: 10px;">
+            <button id="return-editor" class="secondary" type="button" style="display: none;">Tillbaka till editor</button>
+        </div>
+    </div>
+
+    <div id="editor-panel" class="panel stack">
+        <div class="stack" style="gap: 6px;">
+            <h3>Editor</h3>
+            <p id="editor-help">Klicka på marken för att placera valt objekt.</p>
+        </div>
+
+        <div class="tool-row">
+            <button id="tool-ramp" class="active" type="button">Ramp</button>
+            <button id="tool-water" type="button">Vatten</button>
+            <button id="tool-delete" type="button">Ta bort</button>
+        </div>
+
+        <div class="button-row">
+            <button id="rotate-left" type="button">Rotera -15°</button>
+            <button id="rotate-right" type="button">Rotera +15°</button>
+        </div>
+
+        <label>
+            Kartnamn
+            <input id="editor-map-name" type="text" placeholder="Ny bana">
+        </label>
+
+        <div class="button-row">
+            <button id="test-drive" class="secondary" type="button">Provkör karta</button>
+            <button id="save-map" class="secondary" type="button">Spara karta</button>
+            <button id="new-map" type="button">Ny tom karta</button>
+            <button id="back-menu" class="danger" type="button">Till meny</button>
+        </div>
+
+        <p id="save-feedback"></p>
+    </div>
 </div>
 
 <div id="ui-layer">
@@ -63,13 +434,39 @@
     </div>
 </div>
 
-<!-- Three.js (ES Module via CDN) -->
 <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
 
-    // --- SETUP ---
+    const STORAGE_KEY = 'drift-racing-custom-maps-v1';
+    const mapBounds = { min: -95, max: 95 };
+
+    const defaultMaps = [
+        {
+            id: 'classic-circuit',
+            name: 'Classic Circuit',
+            builtIn: true,
+            objects: [
+                { id: crypto.randomUUID(), type: 'ramp', x: -8, z: -18, rotation: 0.35 },
+                { id: crypto.randomUUID(), type: 'ramp', x: 24, z: 18, rotation: -1.05 },
+                { id: crypto.randomUUID(), type: 'water', x: -28, z: 22, rotation: 0 },
+                { id: crypto.randomUUID(), type: 'water', x: 32, z: -14, rotation: 0 }
+            ]
+        },
+        {
+            id: 'harbor-run',
+            name: 'Harbor Run',
+            builtIn: true,
+            objects: [
+                { id: crypto.randomUUID(), type: 'ramp', x: -30, z: 0, rotation: Math.PI / 2 },
+                { id: crypto.randomUUID(), type: 'ramp', x: 8, z: 32, rotation: Math.PI },
+                { id: crypto.randomUUID(), type: 'water', x: 0, z: -28, rotation: 0 },
+                { id: crypto.randomUUID(), type: 'water', x: 36, z: 30, rotation: 0 }
+            ]
+        }
+    ];
+
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x87ceeb, 20, 100);
+    scene.fog = new THREE.Fog(0x87ceeb, 35, 145);
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -77,39 +474,37 @@
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    // Ljus
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.72);
     scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
     dirLight.position.set(100, 100, 50);
     dirLight.castShadow = true;
-    dirLight.shadow.camera.top = 50; dirLight.shadow.camera.bottom = -50;
-    dirLight.shadow.camera.left = -50; dirLight.shadow.camera.right = 50;
+    dirLight.shadow.camera.top = 80;
+    dirLight.shadow.camera.bottom = -80;
+    dirLight.shadow.camera.left = -80;
+    dirLight.shadow.camera.right = 80;
     scene.add(dirLight);
 
-    // --- SKAPA BANA (Procedural Canvas Texture) ---
     function createTrackTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 2048; canvas.height = 2048;
+        canvas.width = 2048;
+        canvas.height = 2048;
         const ctx = canvas.getContext('2d');
-        
-        // Gräs
-        ctx.fillStyle = '#4CAF50';
+
+        ctx.fillStyle = '#4caf50';
         ctx.fillRect(0, 0, 2048, 2048);
-        
-        // Asfalt (Bana)
+
         ctx.lineWidth = 180;
         ctx.strokeStyle = '#333';
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.beginPath();
-        // Rita en oval/åtta-bana
         ctx.moveTo(600, 500);
         ctx.bezierCurveTo(1800, 500, 1800, 1500, 1000, 1500);
         ctx.bezierCurveTo(200, 1500, 200, 500, 600, 500);
         ctx.stroke();
 
-        // Banmarkeringar (Röda/Vita curbs)
         ctx.lineWidth = 20;
         ctx.setLineDash([40, 40]);
         ctx.strokeStyle = '#fff';
@@ -122,41 +517,386 @@
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
         return texture;
     }
 
-    const groundGeo = new THREE.PlaneGeometry(200, 200);
-    const groundMat = new THREE.MeshStandardMaterial({ map: createTrackTexture() });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
+    const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200),
+        new THREE.MeshStandardMaterial({ map: createTrackTexture() })
+    );
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // --- SKAPA BILEN ---
+    const gridHelper = new THREE.GridHelper(200, 20, 0xffffff, 0xffffff);
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.14;
+    gridHelper.visible = false;
+    scene.add(gridHelper);
+
     const carGroup = new THREE.Group();
-    // Kaross
     const bodyGeo = new THREE.BoxGeometry(1.2, 0.5, 2.4);
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
     const carBody = new THREE.Mesh(bodyGeo, bodyMat);
     carBody.position.y = 0.4;
     carBody.castShadow = true;
     carGroup.add(carBody);
-    // Framruta (för att se riktning)
+
     const windowGeo = new THREE.BoxGeometry(1.0, 0.3, 0.8);
     const windowMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
     const carWindow = new THREE.Mesh(windowGeo, windowMat);
     carWindow.position.set(0, 0.7, 0.2);
     carGroup.add(carWindow);
-    
-    // Startposition på banan
-    carGroup.position.set(-20, 0, -25);
+
     scene.add(carGroup);
 
-    // --- EFFEKTER (Rök & Sladdspår) ---
+    const placementPreview = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 0.5, 8),
+        new THREE.MeshStandardMaterial({
+            color: 0xffb100,
+            transparent: true,
+            opacity: 0.45
+        })
+    );
+    placementPreview.visible = false;
+    placementPreview.castShadow = false;
+    scene.add(placementPreview);
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const clock = new THREE.Clock();
+
     const particles = [];
     const skidmarks = [];
     const maxSkidmarks = 150;
+    const mapObjectMeshes = [];
+
+    const input = { forward: false, backward: false, left: false, right: false };
+
+    const physics = {
+        speed: 0,
+        maxSpeed: 100,
+        acceleration: 8,
+        braking: 20,
+        friction: 5,
+        autoDriveSpeed: 3,
+        angle: Math.PI,
+        velocityX: 0,
+        velocityZ: 0,
+        turnSpeed: 2.5,
+        verticalVelocity: 0,
+        gravity: 12,
+        onGround: true
+    };
+
+    const appState = {
+        mode: 'menu',
+        selectedMenuMode: 'drive',
+        selectedTool: 'ramp',
+        placementRotation: 0,
+        maps: [],
+        currentMapId: null,
+        editorMap: null,
+        testDriveActive: false,
+        topSpeed: 0
+    };
+
+    const editorCamera = {
+        targetX: 0,
+        targetZ: 0,
+        distance: 88,
+        yaw: 0,
+        pitch: 0.95,
+        minDistance: 28,
+        maxDistance: 150,
+        panSpeed: 34,
+        rotateSpeed: 0.005,
+        zoomSpeed: 0.08
+    };
+
+    const editorPointerState = {
+        pointerId: null,
+        mode: null,
+        lastX: 0,
+        lastY: 0,
+        moved: false
+    };
+
+    const lastPointerPosition = {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2
+    };
+
+    const engineAudio = new Audio('./astonmartinvantagev12-chevrolet-corvette-c6-sound-effect-360531.mp3');
+    engineAudio.loop = true;
+    engineAudio.volume = 0;
+    const driftAudio = new Audio('./The Sounds of POWER- The Sounds of Formula Drift.mp3');
+    driftAudio.loop = true;
+    driftAudio.volume = 0;
+
+    const mainMenu = document.getElementById('main-menu');
+    const menuMapSelect = document.getElementById('menu-map-select');
+    const menuMapName = document.getElementById('menu-map-name');
+    const startButton = document.getElementById('start-button');
+    const modeCards = [...document.querySelectorAll('.mode-card')];
+    const topBar = document.getElementById('top-bar');
+    const statusTitle = document.getElementById('status-title');
+    const statusText = document.getElementById('status-text');
+    const speedometer = document.getElementById('speedometer');
+    const speedometerValue = document.getElementById('speedometer-value');
+    const speedometerTop = document.getElementById('speedometer-top');
+    const speedometerMax = document.getElementById('speedometer-max');
+    const returnEditorButton = document.getElementById('return-editor');
+    const uiLayer = document.getElementById('ui-layer');
+    const editorPanel = document.getElementById('editor-panel');
+    const editorMapName = document.getElementById('editor-map-name');
+    const testDriveButton = document.getElementById('test-drive');
+    const saveMapButton = document.getElementById('save-map');
+    const newMapButton = document.getElementById('new-map');
+    const backMenuButton = document.getElementById('back-menu');
+    const saveFeedback = document.getElementById('save-feedback');
+    const editorHelp = document.getElementById('editor-help');
+    const toolRamp = document.getElementById('tool-ramp');
+    const toolWater = document.getElementById('tool-water');
+    const toolDelete = document.getElementById('tool-delete');
+    const rotateLeftButton = document.getElementById('rotate-left');
+    const rotateRightButton = document.getElementById('rotate-right');
+
+    function cloneMap(map) {
+        return {
+            id: map.id,
+            name: map.name,
+            builtIn: Boolean(map.builtIn),
+            objects: map.objects.map((object) => ({ ...object }))
+        };
+    }
+
+    function sanitizeObject(object) {
+        if (!object || !['ramp', 'water'].includes(object.type)) {
+            return null;
+        }
+
+        return {
+            id: object.id || crypto.randomUUID(),
+            type: object.type,
+            x: THREE.MathUtils.clamp(Number(object.x) || 0, mapBounds.min, mapBounds.max),
+            z: THREE.MathUtils.clamp(Number(object.z) || 0, mapBounds.min, mapBounds.max),
+            rotation: Number(object.rotation) || 0
+        };
+    }
+
+    function loadCustomMaps() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+
+            return parsed.map((map) => ({
+                id: String(map.id || crypto.randomUUID()),
+                name: String(map.name || 'Untitled Map'),
+                builtIn: false,
+                objects: Array.isArray(map.objects) ? map.objects.map(sanitizeObject).filter(Boolean) : []
+            }));
+        } catch (error) {
+            console.error('Kunde inte ladda sparade kartor', error);
+            return [];
+        }
+    }
+
+    function saveCustomMaps() {
+        const customMaps = appState.maps
+            .filter((map) => !map.builtIn)
+            .map((map) => ({
+                id: map.id,
+                name: map.name,
+                objects: map.objects
+            }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(customMaps));
+    }
+
+    function refreshMaps() {
+        appState.maps = [...defaultMaps.map(cloneMap), ...loadCustomMaps()];
+        if (!appState.currentMapId || !appState.maps.some((map) => map.id === appState.currentMapId)) {
+            appState.currentMapId = appState.maps[0]?.id || null;
+        }
+        renderMapSelect();
+    }
+
+    function renderMapSelect() {
+        menuMapSelect.innerHTML = '';
+        appState.maps.forEach((map) => {
+            const option = document.createElement('option');
+            option.value = map.id;
+            option.textContent = map.builtIn ? `${map.name} (standard)` : `${map.name} (sparad)`;
+            if (map.id === appState.currentMapId) option.selected = true;
+            menuMapSelect.appendChild(option);
+        });
+    }
+
+    function getCurrentMap() {
+        return appState.maps.find((map) => map.id === appState.currentMapId) || appState.maps[0];
+    }
+
+    function setStatus(title, text) {
+        statusTitle.textContent = title;
+        statusText.textContent = text;
+    }
+
+    function updateSpeedometer() {
+        const currentSpeed = Math.sqrt((physics.velocityX ** 2) + (physics.velocityZ ** 2));
+        const displaySpeed = Math.round(currentSpeed * 4);
+        appState.topSpeed = Math.max(appState.topSpeed, displaySpeed);
+        speedometerValue.textContent = `${displaySpeed} km/h`;
+        speedometerTop.textContent = `Topp: ${appState.topSpeed} km/h`;
+        speedometerMax.textContent = `Max: ${Math.round(physics.maxSpeed * 4)} km/h`;
+        speedometer.classList.toggle('visible', appState.mode === 'drive');
+        speedometer.classList.toggle('speed-warning', displaySpeed >= 220 && displaySpeed < 320);
+        speedometer.classList.toggle('speed-critical', displaySpeed >= 320);
+    }
+
+    function clampEditorCamera() {
+        editorCamera.targetX = THREE.MathUtils.clamp(editorCamera.targetX, mapBounds.min, mapBounds.max);
+        editorCamera.targetZ = THREE.MathUtils.clamp(editorCamera.targetZ, mapBounds.min, mapBounds.max);
+        editorCamera.distance = THREE.MathUtils.clamp(editorCamera.distance, editorCamera.minDistance, editorCamera.maxDistance);
+        editorCamera.pitch = THREE.MathUtils.clamp(editorCamera.pitch, 0.45, 1.35);
+    }
+
+    function resetEditorCamera() {
+        editorCamera.targetX = 0;
+        editorCamera.targetZ = 0;
+        editorCamera.distance = 88;
+        editorCamera.yaw = 0;
+        editorCamera.pitch = 0.95;
+        clampEditorCamera();
+    }
+
+    function isTypingTarget(target) {
+        if (!target) return false;
+        const tagName = target.tagName?.toLowerCase();
+        return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+    }
+
+    function disposeObjectMesh(entry) {
+        scene.remove(entry.mesh);
+        entry.mesh.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach((material) => material.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+    }
+
+    function clearMapObjects() {
+        while (mapObjectMeshes.length) {
+            disposeObjectMesh(mapObjectMeshes.pop());
+        }
+    }
+
+    function createRampMesh(object) {
+        const group = new THREE.Group();
+
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(6, 0.4, 8),
+            new THREE.MeshStandardMaterial({ color: 0x6a4524 })
+        );
+        base.position.y = 0.2;
+        base.castShadow = true;
+        base.receiveShadow = true;
+        group.add(base);
+
+        const slope = new THREE.Mesh(
+            new THREE.BoxGeometry(6, 0.25, 8),
+            new THREE.MeshStandardMaterial({ color: 0xc77d2b })
+        );
+        slope.position.set(0, 0.95, 0);
+        slope.rotation.x = -0.28;
+        slope.castShadow = true;
+        slope.receiveShadow = true;
+        group.add(slope);
+
+        group.position.set(object.x, 0, object.z);
+        group.rotation.y = object.rotation;
+        return group;
+    }
+
+    function createWaterMesh(object) {
+        const group = new THREE.Group();
+
+        const pool = new THREE.Mesh(
+            new THREE.CylinderGeometry(5.5, 5.5, 0.22, 28),
+            new THREE.MeshStandardMaterial({
+                color: 0x1e88e5,
+                transparent: true,
+                opacity: 0.72,
+                roughness: 0.2,
+                metalness: 0.05
+            })
+        );
+        pool.position.y = 0.02;
+        pool.receiveShadow = true;
+        group.add(pool);
+
+        const rim = new THREE.Mesh(
+            new THREE.CylinderGeometry(6.2, 6.2, 0.18, 28),
+            new THREE.MeshStandardMaterial({ color: 0x546e7a })
+        );
+        rim.position.y = 0.12;
+        rim.receiveShadow = true;
+        rim.castShadow = true;
+        group.add(rim);
+
+        group.position.set(object.x, 0, object.z);
+        group.rotation.y = object.rotation;
+        return group;
+    }
+
+    function buildMapObjects(map) {
+        clearMapObjects();
+        for (const object of map.objects) {
+            const mesh = object.type === 'ramp' ? createRampMesh(object) : createWaterMesh(object);
+            scene.add(mesh);
+            mapObjectMeshes.push({ object, mesh });
+        }
+    }
+
+    function resetCar() {
+        carGroup.position.set(-20, 0, -25);
+        carGroup.rotation.y = Math.PI;
+        physics.speed = 0;
+        physics.angle = Math.PI;
+        physics.velocityX = 0;
+        physics.velocityZ = 0;
+        physics.verticalVelocity = 0;
+        physics.onGround = true;
+        appState.topSpeed = 0;
+    }
+
+    function clearEffects() {
+        while (particles.length) {
+            const particle = particles.pop();
+            scene.remove(particle.mesh);
+            particle.mesh.geometry.dispose();
+            particle.mesh.material.dispose();
+        }
+        while (skidmarks.length) {
+            const mark = skidmarks.pop();
+            scene.remove(mark);
+            mark.geometry.dispose();
+            mark.material.dispose();
+        }
+    }
+
+    function loadMapIntoScene(map) {
+        appState.currentMapId = map.id;
+        buildMapObjects(map);
+        resetCar();
+        clearEffects();
+    }
 
     function spawnSmoke(x, y, z) {
         const geo = new THREE.SphereGeometry(0.3, 4, 4);
@@ -171,7 +911,7 @@
         const geo = new THREE.PlaneGeometry(0.8, 0.4);
         const mat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.5 });
         const mark = new THREE.Mesh(geo, mat);
-        mark.position.set(x, 0.01, z); // Strax över marken
+        mark.position.set(x, 0.01, z);
         mark.rotation.x = -Math.PI / 2;
         mark.rotation.z = -angle;
         scene.add(mark);
@@ -184,168 +924,162 @@
         }
     }
 
-    // --- KONTROLLER & INPUT ---
-    const input = { forward: false, backward: false, left: false, right: false };
-
-    // Desktop
-    window.addEventListener('keydown', (e) => {
-        if(e.key === 'ArrowUp' || e.key === 'w') input.forward = true;
-        if(e.key === 'ArrowDown' || e.key === 's') input.backward = true;
-        if(e.key === 'ArrowLeft' || e.key === 'a') input.left = true;
-        if(e.key === 'ArrowRight' || e.key === 'd') input.right = true;
-    });
-    window.addEventListener('keyup', (e) => {
-        if(e.key === 'ArrowUp' || e.key === 'w') input.forward = false;
-        if(e.key === 'ArrowDown' || e.key === 's') input.backward = false;
-        if(e.key === 'ArrowLeft' || e.key === 'a') input.left = false;
-        if(e.key === 'ArrowRight' || e.key === 'd') input.right = false;
-    });
-
-    // Mobil Touch
-    const bindBtn = (id, key) => {
-        const btn = document.getElementById(id);
-        const down = (e) => { e.preventDefault(); input[key] = true; btn.classList.add('active'); };
-        const up = (e) => { e.preventDefault(); input[key] = false; btn.classList.remove('active'); };
-        btn.addEventListener('pointerdown', down);
-        btn.addEventListener('pointerup', up);
-        btn.addEventListener('pointercancel', up);
-    };
-    bindBtn('btn-gas', 'forward');
-    bindBtn('btn-brake', 'backward');
-    bindBtn('btn-left', 'left');
-    bindBtn('btn-right', 'right');
-
-    // --- LJUD ---
-    const engineAudio = new Audio('./astonmartinvantagev12-chevrolet-corvette-c6-sound-effect-360531.mp3');
-    engineAudio.loop = true;
-    engineAudio.volume = 0;
-    const driftAudio = new Audio('./The Sounds of POWER- The Sounds of Formula Drift.mp3');
-    driftAudio.loop = true;
-    driftAudio.volume = 0;
-
     function ensureEngineAudioStarted() {
         if (ensureEngineAudioStarted.started) return;
         ensureEngineAudioStarted.started = true;
-        Promise.all([
-            engineAudio.play(),
-            driftAudio.play()
-        ]).catch(() => {
+        Promise.all([engineAudio.play(), driftAudio.play()]).catch(() => {
             ensureEngineAudioStarted.started = false;
         });
     }
     ensureEngineAudioStarted.started = false;
 
-    window.addEventListener('pointerdown', ensureEngineAudioStarted, { passive: true });
-    window.addEventListener('keydown', ensureEngineAudioStarted);
+    function findRampAtPosition(position) {
+        for (const entry of mapObjectMeshes) {
+            if (entry.object.type !== 'ramp') continue;
 
-    // --- FYSIK & DRIFTING LOGIK ---
-    const physics = {
-        speed: 0,
-        maxSpeed: 25,
-        acceleration: 15,
-        braking: 20,
-        friction: 5,
-        autoDriveSpeed: 3, // Kör automatiskt långsamt
-        angle: Math.PI,    // Bilens visuella riktning
-        velocityX: 0,
-        velocityZ: 0,
-        turnSpeed: 2.5
-    };
+            const local = entry.mesh.worldToLocal(position.clone());
+            if (Math.abs(local.x) <= 3 && Math.abs(local.z) <= 4) {
+                return { entry, local };
+            }
+        }
+        return null;
+    }
 
-    const clock = new THREE.Clock();
+    function findWaterAtPosition(position) {
+        for (const entry of mapObjectMeshes) {
+            if (entry.object.type !== 'water') continue;
+            const dx = position.x - entry.object.x;
+            const dz = position.z - entry.object.z;
+            if ((dx * dx) + (dz * dz) <= 6 * 6) return entry;
+        }
+        return null;
+    }
 
     function updatePhysics(delta) {
-        // Gas & Broms (med auto-drive)
+        if (appState.mode !== 'drive') {
+            engineAudio.volume = THREE.MathUtils.lerp(engineAudio.volume, 0, 4 * delta);
+            driftAudio.volume = THREE.MathUtils.lerp(driftAudio.volume, 0, 4 * delta);
+            return;
+        }
+
         if (input.forward) {
             physics.speed += physics.acceleration * delta;
         } else if (input.backward) {
             physics.speed -= physics.braking * delta;
         } else {
-            // Återgå till autoDriveSpeed
             if (physics.speed > physics.autoDriveSpeed) {
                 physics.speed -= physics.friction * delta;
             } else if (physics.speed < physics.autoDriveSpeed && physics.speed >= 0) {
                 physics.speed += physics.friction * delta * 0.5;
             }
         }
-        
-        // Backa gräns
+
+        const water = findWaterAtPosition(carGroup.position);
+        const surfaceFriction = water ? 7.5 : physics.friction;
+        if (!input.forward && !input.backward && physics.speed > physics.autoDriveSpeed) {
+            physics.speed -= (surfaceFriction - physics.friction) * delta;
+        }
+        if (water) {
+            physics.speed *= 1 - (0.9 * delta);
+        }
+
         physics.speed = THREE.MathUtils.clamp(physics.speed, -10, physics.maxSpeed);
 
-        // Styrning (bara om vi rör oss)
         const isReversing = physics.speed < 0 ? -1 : 1;
-        const moveRatio = Math.abs(physics.speed) / physics.maxSpeed;
         if (Math.abs(physics.speed) > 0.1) {
             if (input.left) physics.angle += physics.turnSpeed * delta * isReversing;
             if (input.right) physics.angle -= physics.turnSpeed * delta * isReversing;
         }
 
-        // --- DRIFTING MAGIN ---
-        // Vart bilen pekar
         const targetDirX = Math.sin(physics.angle);
         const targetDirZ = Math.cos(physics.angle);
-
-        // Mål-hastighetsvektor
         const targetVelX = targetDirX * physics.speed;
         const targetVelZ = targetDirZ * physics.speed;
 
-        // Grip (Hur snabbt hastigheten anpassar sig till riktningen). Lägre = mer drift.
-        const grip = 3.5; 
+        const grip = water ? 2.2 : 3.5;
         physics.velocityX = THREE.MathUtils.lerp(physics.velocityX, targetVelX, grip * delta);
         physics.velocityZ = THREE.MathUtils.lerp(physics.velocityZ, targetVelZ, grip * delta);
 
-        // Applicera hastighet till position
         carGroup.position.x += physics.velocityX * delta;
         carGroup.position.z += physics.velocityZ * delta;
-        
-        // Uppdatera bilens visuella rotation
+        carGroup.position.x = THREE.MathUtils.clamp(carGroup.position.x, mapBounds.min, mapBounds.max);
+        carGroup.position.z = THREE.MathUtils.clamp(carGroup.position.z, mapBounds.min, mapBounds.max);
         carGroup.rotation.y = physics.angle;
 
-        // Beräkna "slip angle" (skillnad mellan rörelsevektor och riktningsvektor) för effekter
-        const currentSpeed = Math.sqrt(physics.velocityX**2 + physics.velocityZ**2);
+        const rampHit = findRampAtPosition(carGroup.position);
+        let groundHeight = 0;
+        if (rampHit) {
+            groundHeight = THREE.MathUtils.clamp((rampHit.local.z + 4) / 8, 0, 1) * 1.8;
+            if (groundHeight > 1.55 && physics.onGround && Math.abs(physics.speed) > 10) {
+                physics.verticalVelocity = 10 + Math.abs(physics.speed) * 0.12;
+                physics.onGround = false;
+            }
+        }
+
+        if (!physics.onGround || carGroup.position.y > groundHeight) {
+            physics.verticalVelocity -= physics.gravity * delta;
+            carGroup.position.y += physics.verticalVelocity * delta;
+            if (carGroup.position.y <= groundHeight) {
+                carGroup.position.y = groundHeight;
+                physics.verticalVelocity = 0;
+                physics.onGround = true;
+            }
+        } else {
+            carGroup.position.y = groundHeight;
+            physics.verticalVelocity = 0;
+            physics.onGround = true;
+        }
+
+        const currentSpeed = Math.sqrt(physics.velocityX ** 2 + physics.velocityZ ** 2);
         const moveDirAngle = Math.atan2(physics.velocityX, physics.velocityZ);
-        
-        // Hur mycket sladdar vi?
         let slip = Math.abs(physics.angle - moveDirAngle);
-        slip = Math.atan2(Math.sin(slip), Math.cos(slip)); // Normalisera till -PI till PI
+        slip = Math.atan2(Math.sin(slip), Math.cos(slip));
         const slipAmount = Math.abs(slip);
         const steeringAmount = (input.left || input.right) ? 1 : 0;
         const speedFactor = THREE.MathUtils.clamp((currentSpeed - 4) / 12, 0, 1);
         const driftFactor = THREE.MathUtils.clamp((slipAmount - 0.18) / 0.75, 0, 1) * speedFactor * steeringAmount;
-        const targetEngineVolume = driftFactor > 0.05 ? 0 : (input.forward ? 0.45 : 0);
+        const targetEngineVolume = input.forward ? 0.45 : 0;
+        const targetDriftVolume = input.forward ? driftFactor * 0.75 : 0;
         engineAudio.volume = THREE.MathUtils.lerp(engineAudio.volume, targetEngineVolume, 3 * delta);
-        driftAudio.volume = THREE.MathUtils.lerp(driftAudio.volume, driftFactor * 0.75, 3 * delta);
+        driftAudio.volume = THREE.MathUtils.lerp(driftAudio.volume, targetDriftVolume, 3 * delta);
 
-        // Aktivera effekter om vi kör fort och sladdar mycket
-        if (currentSpeed > 5 && slipAmount > 0.3) {
-            // Räkna ut var bakhjulen är ungefär
+        if (currentSpeed > 5 && slipAmount > 0.3 && physics.onGround) {
             const backX = carGroup.position.x - Math.sin(physics.angle) * 1.0;
             const backZ = carGroup.position.z - Math.cos(physics.angle) * 1.0;
-            
             spawnSkidmark(backX, backZ, physics.angle);
-            if(Math.random() > 0.5) spawnSmoke(backX + (Math.random()-0.5), 0.2, backZ + (Math.random()-0.5));
-            
-            // Få bilen att skaka lite vid drifting
+            if (Math.random() > 0.5) {
+                spawnSmoke(backX + (Math.random() - 0.5), 0.2 + carGroup.position.y, backZ + (Math.random() - 0.5));
+            }
             carBody.position.x = (Math.random() - 0.5) * 0.05;
         } else {
             carBody.position.x = 0;
         }
     }
 
-    // --- KAMERA (Stående mobil-vänlig) ---
     function updateCamera() {
+        if (appState.mode === 'editor') {
+            clampEditorCamera();
+            const horizontalDistance = Math.cos(editorCamera.pitch) * editorCamera.distance;
+            const target = new THREE.Vector3(editorCamera.targetX, 0, editorCamera.targetZ);
+            const desiredX = editorCamera.targetX + Math.sin(editorCamera.yaw) * horizontalDistance;
+            const desiredZ = editorCamera.targetZ + Math.cos(editorCamera.yaw) * horizontalDistance;
+            const desiredY = Math.sin(editorCamera.pitch) * editorCamera.distance;
+
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, desiredX, 0.16);
+            camera.position.z = THREE.MathUtils.lerp(camera.position.z, desiredZ, 0.16);
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, desiredY, 0.16);
+            camera.lookAt(target);
+            return;
+        }
+
         const offsetDist = 7;
         const offsetHeight = 5;
-        
-        // Kameran följer efter bilen, lite mer flexibel för "fartkänsla"
         const targetCamX = carGroup.position.x - Math.sin(physics.angle) * offsetDist;
         const targetCamZ = carGroup.position.z - Math.cos(physics.angle) * offsetDist;
-
         camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, 0.1);
         camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetCamZ, 0.1);
         camera.position.y = THREE.MathUtils.lerp(camera.position.y, carGroup.position.y + offsetHeight, 0.1);
 
-        // Titta en bit framför bilen
         const lookAtTarget = new THREE.Vector3(
             carGroup.position.x + Math.sin(physics.angle) * 3,
             carGroup.position.y,
@@ -354,39 +1088,489 @@
         camera.lookAt(lookAtTarget);
     }
 
-    // --- RENDER LOOP ---
-    function animate() {
-        requestAnimationFrame(animate);
-        const delta = Math.min(clock.getDelta(), 0.1); // Förhindra glitch vid lagg
-
-        updatePhysics(delta);
-        updateCamera();
-
-        // Uppdatera rökpartiklar
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.life -= delta * 1.5;
-            p.mesh.position.y += delta * 2;
-            p.mesh.scale.setScalar(p.life * 1.5);
-            p.mesh.material.opacity = p.life;
-            if (p.life <= 0) {
-                scene.remove(p.mesh);
-                p.mesh.geometry.dispose();
-                p.mesh.material.dispose();
+    function updateParticles(delta) {
+        for (let i = particles.length - 1; i >= 0; i -= 1) {
+            const particle = particles[i];
+            particle.life -= delta * 1.5;
+            particle.mesh.position.y += delta * 2;
+            particle.mesh.scale.setScalar(particle.life * 1.5);
+            particle.mesh.material.opacity = particle.life;
+            if (particle.life <= 0) {
+                scene.remove(particle.mesh);
+                particle.mesh.geometry.dispose();
+                particle.mesh.material.dispose();
                 particles.splice(i, 1);
             }
         }
-
-        renderer.render(scene, camera);
     }
 
-    // Hantera ändring av fönsterstorlek (Mobil rotering)
+    function setMenuMode(mode) {
+        appState.selectedMenuMode = mode;
+        modeCards.forEach((card) => card.classList.toggle('selected', card.dataset.mode === mode));
+        const editing = mode === 'editor';
+        menuMapName.style.display = editing ? 'block' : 'none';
+    }
+
+    function updateToolButtons() {
+        toolRamp.classList.toggle('active', appState.selectedTool === 'ramp');
+        toolWater.classList.toggle('active', appState.selectedTool === 'water');
+        toolDelete.classList.toggle('active', appState.selectedTool === 'delete');
+
+        placementPreview.visible = appState.mode === 'editor' && appState.selectedTool !== 'delete';
+        if (appState.selectedTool === 'water') {
+            placementPreview.geometry.dispose();
+            placementPreview.geometry = new THREE.CylinderGeometry(5.5, 5.5, 0.22, 28);
+            placementPreview.material.color.set(0x48b8ff);
+        } else {
+            placementPreview.geometry.dispose();
+            placementPreview.geometry = new THREE.BoxGeometry(6, 0.5, 8);
+            placementPreview.material.color.set(0xffb100);
+        }
+    }
+
+    function setAppMode(mode) {
+        appState.mode = mode;
+        const showMenu = mode === 'menu';
+        const showEditor = mode === 'editor';
+        const showDrive = mode === 'drive';
+
+        mainMenu.classList.toggle('visible', showMenu);
+        topBar.classList.toggle('visible', !showMenu);
+        editorPanel.classList.toggle('visible', showEditor);
+        uiLayer.classList.toggle('visible', showDrive);
+        gridHelper.visible = showEditor;
+        placementPreview.visible = showEditor && appState.selectedTool !== 'delete';
+        returnEditorButton.style.display = showDrive && appState.testDriveActive ? 'inline-flex' : 'none';
+        speedometer.classList.toggle('visible', showDrive);
+
+        if (showMenu) {
+            setStatus('Huvudmeny', 'Välj drive mode eller editor mode.');
+        } else if (showDrive) {
+            if (appState.testDriveActive && appState.editorMap) {
+                setStatus('Provkörning', `Testar: ${appState.editorMap.name}. Tryck Escape för att gå tillbaka till editorn.`);
+            } else {
+                const map = getCurrentMap();
+                setStatus('Drive Mode', `Karta: ${map.name}. Mobil: knapparna. Desktop: WASD eller piltangenter.`);
+            }
+        } else if (showEditor) {
+            const mapName = appState.editorMap?.name || 'Ny karta';
+            setStatus('Editor Mode', `Redigerar: ${mapName}. WASD panorerar, mushjul zoomar, högerklick roterar kameran.`);
+        }
+    }
+
+    function createBlankMap(name = 'Ny karta') {
+        return {
+            id: `custom-${crypto.randomUUID()}`,
+            name,
+            builtIn: false,
+            objects: []
+        };
+    }
+
+    function openDriveMode(mapId) {
+        appState.testDriveActive = false;
+        appState.currentMapId = mapId || appState.currentMapId;
+        const map = getCurrentMap();
+        loadMapIntoScene(map);
+        setAppMode('drive');
+    }
+
+    function openEditorMode(mapId, requestedName) {
+        appState.testDriveActive = false;
+        const selected = appState.maps.find((map) => map.id === mapId);
+        if (selected && !selected.builtIn) {
+            appState.editorMap = cloneMap(selected);
+        } else {
+            appState.editorMap = createBlankMap((requestedName || '').trim() || 'Ny karta');
+        }
+
+        editorMapName.value = appState.editorMap.name;
+        buildMapObjects(appState.editorMap);
+        resetCar();
+        resetEditorCamera();
+        clearEffects();
+        appState.selectedTool = 'ramp';
+        appState.placementRotation = 0;
+        saveFeedback.textContent = '';
+        editorHelp.textContent = 'Klicka för att placera. WASD panorerar, mushjul zoomar, högerklick drar runt kameran och Shift + vänsterdrag panorerar.';
+        updateToolButtons();
+        setAppMode('editor');
+    }
+
+    function startEditorTestDrive() {
+        if (!appState.editorMap) return;
+        appState.editorMap.name = editorMapName.value.trim() || 'Ny karta';
+        editorMapName.value = appState.editorMap.name;
+        appState.testDriveActive = true;
+        loadMapIntoScene(appState.editorMap);
+        setAppMode('drive');
+    }
+
+    function returnFromTestDrive() {
+        if (!appState.editorMap) return;
+        appState.testDriveActive = false;
+        editorMapName.value = appState.editorMap.name;
+        buildMapObjects(appState.editorMap);
+        resetCar();
+        resetEditorCamera();
+        clearEffects();
+        updateToolButtons();
+        setAppMode('editor');
+    }
+
+    function upsertMap(map) {
+        const index = appState.maps.findIndex((existing) => existing.id === map.id);
+        if (index >= 0) {
+            appState.maps[index] = cloneMap(map);
+        } else {
+            appState.maps.push(cloneMap(map));
+        }
+        appState.currentMapId = map.id;
+        saveCustomMaps();
+        refreshMaps();
+        menuMapSelect.value = map.id;
+    }
+
+    function saveEditorMap() {
+        if (!appState.editorMap) return;
+        const name = editorMapName.value.trim() || 'Ny karta';
+        appState.editorMap.name = name;
+        upsertMap(appState.editorMap);
+        saveFeedback.textContent = `Kartan sparad som "${name}".`;
+        setStatus('Editor Mode', `Redigerar: ${name}. Kartan finns nu i drive mode.`);
+    }
+
+    function screenToGround(clientX, clientY) {
+        pointer.x = (clientX / window.innerWidth) * 2 - 1;
+        pointer.y = -(clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(pointer, camera);
+        const hits = raycaster.intersectObject(ground);
+        return hits[0]?.point || null;
+    }
+
+    function findEditorObjectAt(point) {
+        for (let index = mapObjectMeshes.length - 1; index >= 0; index -= 1) {
+            const entry = mapObjectMeshes[index];
+            if (entry.object.type === 'ramp') {
+                const local = entry.mesh.worldToLocal(point.clone());
+                if (Math.abs(local.x) <= 3.5 && Math.abs(local.z) <= 4.5) return entry.object.id;
+            } else {
+                const dx = point.x - entry.object.x;
+                const dz = point.z - entry.object.z;
+                if ((dx * dx) + (dz * dz) <= 6.2 * 6.2) return entry.object.id;
+            }
+        }
+        return null;
+    }
+
+    function placeEditorObject(point) {
+        if (!appState.editorMap) return;
+
+        if (appState.selectedTool === 'delete') {
+            const removeId = findEditorObjectAt(point);
+            if (!removeId) return;
+            appState.editorMap.objects = appState.editorMap.objects.filter((object) => object.id !== removeId);
+            buildMapObjects(appState.editorMap);
+            saveFeedback.textContent = 'Objekt borttaget.';
+            return;
+        }
+
+        const object = {
+            id: crypto.randomUUID(),
+            type: appState.selectedTool,
+            x: Math.round(point.x),
+            z: Math.round(point.z),
+            rotation: appState.selectedTool === 'ramp' ? appState.placementRotation : 0
+        };
+        appState.editorMap.objects.push(object);
+        buildMapObjects(appState.editorMap);
+        saveFeedback.textContent = `${object.type === 'ramp' ? 'Ramp' : 'Vattenbassäng'} placerad.`;
+    }
+
+    function updatePlacementPreview(clientX, clientY) {
+        lastPointerPosition.x = clientX;
+        lastPointerPosition.y = clientY;
+        if (appState.mode !== 'editor' || appState.selectedTool === 'delete') return;
+        const point = screenToGround(clientX, clientY);
+        if (!point) return;
+        placementPreview.position.set(Math.round(point.x), appState.selectedTool === 'water' ? 0.16 : 0.4, Math.round(point.z));
+        placementPreview.rotation.set(0, appState.placementRotation, 0);
+    }
+
+    function panEditorCamera(deltaX, deltaY) {
+        const panScale = editorCamera.distance * 0.018;
+        const rightX = Math.cos(editorCamera.yaw);
+        const rightZ = -Math.sin(editorCamera.yaw);
+        const forwardX = Math.sin(editorCamera.yaw);
+        const forwardZ = Math.cos(editorCamera.yaw);
+
+        editorCamera.targetX += (-deltaX * rightX + deltaY * forwardX) * panScale;
+        editorCamera.targetZ += (-deltaX * rightZ + deltaY * forwardZ) * panScale;
+        clampEditorCamera();
+    }
+
+    function updateEditorKeyboardPan(delta) {
+        if (appState.mode !== 'editor') return;
+        if (isTypingTarget(document.activeElement)) return;
+
+        let moveX = 0;
+        let moveZ = 0;
+        if (input.left) moveX -= 1;
+        if (input.right) moveX += 1;
+        if (input.forward) moveZ -= 1;
+        if (input.backward) moveZ += 1;
+
+        if (!moveX && !moveZ) return;
+
+        const length = Math.hypot(moveX, moveZ) || 1;
+        moveX /= length;
+        moveZ /= length;
+
+        const speed = editorCamera.panSpeed * (editorCamera.distance / 80) * delta;
+        const rightX = Math.cos(editorCamera.yaw);
+        const rightZ = -Math.sin(editorCamera.yaw);
+        const forwardX = Math.sin(editorCamera.yaw);
+        const forwardZ = Math.cos(editorCamera.yaw);
+
+        editorCamera.targetX += (moveX * rightX + moveZ * forwardX) * speed;
+        editorCamera.targetZ += (moveX * rightZ + moveZ * forwardZ) * speed;
+        clampEditorCamera();
+    }
+
+    function bindBtn(id, key) {
+        const btn = document.getElementById(id);
+        const down = (event) => {
+            event.preventDefault();
+            ensureEngineAudioStarted();
+            input[key] = true;
+            btn.classList.add('active');
+        };
+        const up = (event) => {
+            event.preventDefault();
+            input[key] = false;
+            btn.classList.remove('active');
+        };
+        btn.addEventListener('pointerdown', down);
+        btn.addEventListener('pointerup', up);
+        btn.addEventListener('pointercancel', up);
+        btn.addEventListener('pointerleave', up);
+    }
+
+    bindBtn('btn-gas', 'forward');
+    bindBtn('btn-brake', 'backward');
+    bindBtn('btn-left', 'left');
+    bindBtn('btn-right', 'right');
+
+    window.addEventListener('keydown', (event) => {
+        ensureEngineAudioStarted();
+        if (isTypingTarget(event.target)) return;
+        if (event.key === 'ArrowUp' || event.key === 'w') input.forward = true;
+        if (event.key === 'ArrowDown' || event.key === 's') input.backward = true;
+        if (event.key === 'ArrowLeft' || event.key === 'a') input.left = true;
+        if (event.key === 'ArrowRight' || event.key === 'd') input.right = true;
+
+        if (appState.mode === 'editor') {
+            if (event.key.toLowerCase() === 'q') {
+                appState.placementRotation -= Math.PI / 12;
+            }
+            if (event.key.toLowerCase() === 'e') {
+                appState.placementRotation += Math.PI / 12;
+            }
+            updatePlacementPreview(window.innerWidth / 2, window.innerHeight / 2);
+        }
+    });
+
+    window.addEventListener('keyup', (event) => {
+        if (isTypingTarget(event.target)) return;
+        if (event.key === 'ArrowUp' || event.key === 'w') input.forward = false;
+        if (event.key === 'ArrowDown' || event.key === 's') input.backward = false;
+        if (event.key === 'ArrowLeft' || event.key === 'a') input.left = false;
+        if (event.key === 'ArrowRight' || event.key === 'd') input.right = false;
+    });
+
+    window.addEventListener('pointerdown', ensureEngineAudioStarted, { passive: true });
+
+    renderer.domElement.addEventListener('contextmenu', (event) => {
+        if (appState.mode === 'editor') {
+            event.preventDefault();
+        }
+    });
+
+    renderer.domElement.addEventListener('wheel', (event) => {
+        if (appState.mode !== 'editor') return;
+        event.preventDefault();
+        editorCamera.distance *= 1 + (event.deltaY * editorCamera.zoomSpeed * 0.001);
+        clampEditorCamera();
+        updatePlacementPreview(lastPointerPosition.x, lastPointerPosition.y);
+    }, { passive: false });
+
+    renderer.domElement.addEventListener('pointermove', (event) => {
+        updatePlacementPreview(event.clientX, event.clientY);
+
+        if (appState.mode !== 'editor' || event.pointerId !== editorPointerState.pointerId || !editorPointerState.mode) {
+            return;
+        }
+
+        const deltaX = event.clientX - editorPointerState.lastX;
+        const deltaY = event.clientY - editorPointerState.lastY;
+        if (Math.abs(deltaX) > 1 || Math.abs(deltaY) > 1) {
+            editorPointerState.moved = true;
+        }
+
+        if (editorPointerState.mode === 'rotate') {
+            editorCamera.yaw -= deltaX * editorCamera.rotateSpeed;
+            editorCamera.pitch -= deltaY * editorCamera.rotateSpeed * 0.7;
+            clampEditorCamera();
+        } else if (editorPointerState.mode === 'pan') {
+            panEditorCamera(deltaX, deltaY);
+        }
+
+        editorPointerState.lastX = event.clientX;
+        editorPointerState.lastY = event.clientY;
+    });
+
+    renderer.domElement.addEventListener('pointerdown', (event) => {
+        if (appState.mode !== 'editor') return;
+
+        editorPointerState.pointerId = event.pointerId;
+        editorPointerState.lastX = event.clientX;
+        editorPointerState.lastY = event.clientY;
+        editorPointerState.moved = false;
+
+        if (event.button === 2) {
+            editorPointerState.mode = 'rotate';
+            renderer.domElement.setPointerCapture(event.pointerId);
+            return;
+        }
+
+        if (event.button === 1 || (event.button === 0 && event.shiftKey)) {
+            editorPointerState.mode = 'pan';
+            renderer.domElement.setPointerCapture(event.pointerId);
+            return;
+        }
+
+        if (event.button === 0) {
+            editorPointerState.mode = 'place';
+        }
+    });
+
+    renderer.domElement.addEventListener('pointerup', (event) => {
+        if (appState.mode !== 'editor' || event.pointerId !== editorPointerState.pointerId) return;
+
+        const shouldPlace = editorPointerState.mode === 'place' && !editorPointerState.moved && event.button === 0;
+        if (shouldPlace) {
+            const point = screenToGround(event.clientX, event.clientY);
+            if (point) placeEditorObject(point);
+            updatePlacementPreview(event.clientX, event.clientY);
+        }
+
+        if (renderer.domElement.hasPointerCapture(event.pointerId)) {
+            renderer.domElement.releasePointerCapture(event.pointerId);
+        }
+        editorPointerState.pointerId = null;
+        editorPointerState.mode = null;
+        editorPointerState.moved = false;
+    });
+
+    renderer.domElement.addEventListener('pointercancel', (event) => {
+        if (event.pointerId !== editorPointerState.pointerId) return;
+        if (renderer.domElement.hasPointerCapture(event.pointerId)) {
+            renderer.domElement.releasePointerCapture(event.pointerId);
+        }
+        editorPointerState.pointerId = null;
+        editorPointerState.mode = null;
+        editorPointerState.moved = false;
+    });
+
+    modeCards.forEach((card) => {
+        card.addEventListener('click', () => setMenuMode(card.dataset.mode));
+    });
+
+    menuMapSelect.addEventListener('change', () => {
+        appState.currentMapId = menuMapSelect.value;
+        const current = getCurrentMap();
+        if (appState.selectedMenuMode === 'editor' && current && !current.builtIn) {
+            menuMapName.value = current.name;
+        }
+    });
+
+    startButton.addEventListener('click', () => {
+        const mapId = menuMapSelect.value;
+        if (appState.selectedMenuMode === 'drive') {
+            openDriveMode(mapId);
+        } else {
+            openEditorMode(mapId, menuMapName.value);
+        }
+    });
+
+    toolRamp.addEventListener('click', () => {
+        appState.selectedTool = 'ramp';
+        updateToolButtons();
+    });
+    toolWater.addEventListener('click', () => {
+        appState.selectedTool = 'water';
+        updateToolButtons();
+    });
+    toolDelete.addEventListener('click', () => {
+        appState.selectedTool = 'delete';
+        updateToolButtons();
+    });
+
+    rotateLeftButton.addEventListener('click', () => {
+        appState.placementRotation -= Math.PI / 12;
+        updatePlacementPreview(window.innerWidth / 2, window.innerHeight / 2);
+    });
+    rotateRightButton.addEventListener('click', () => {
+        appState.placementRotation += Math.PI / 12;
+        updatePlacementPreview(window.innerWidth / 2, window.innerHeight / 2);
+    });
+
+    saveMapButton.addEventListener('click', saveEditorMap);
+    testDriveButton.addEventListener('click', startEditorTestDrive);
+    returnEditorButton.addEventListener('click', returnFromTestDrive);
+
+    newMapButton.addEventListener('click', () => {
+        appState.editorMap = createBlankMap('Ny karta');
+        editorMapName.value = appState.editorMap.name;
+        buildMapObjects(appState.editorMap);
+        resetEditorCamera();
+        saveFeedback.textContent = 'Tom karta skapad.';
+        setStatus('Editor Mode', 'Redigerar: Ny karta. Placera ut objekt och spara när du är klar.');
+    });
+
+    backMenuButton.addEventListener('click', () => {
+        appState.testDriveActive = false;
+        refreshMaps();
+        setAppMode('menu');
+    });
+
+    window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && appState.mode === 'drive' && appState.testDriveActive) {
+            returnFromTestDrive();
+        }
+    });
+
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    function animate() {
+        requestAnimationFrame(animate);
+        const delta = Math.min(clock.getDelta(), 0.1);
+        updatePhysics(delta);
+        updateEditorKeyboardPan(delta);
+        updateCamera();
+        updateParticles(delta);
+        updateSpeedometer();
+        renderer.render(scene, camera);
+    }
+
+    refreshMaps();
+    setMenuMode('drive');
+    setAppMode('menu');
+    loadMapIntoScene(getCurrentMap());
     animate();
 </script>
 </body>
